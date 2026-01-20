@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
     
     pmf_startproc(argc, argv, NULL);
     
-    type = 105 - 101;  /* type = 1 */
+    type = 102 - 101; 
     
     fileno = apl006_getfileno(type);
     printf("fileno=[%d]\n", fileno);
