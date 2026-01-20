@@ -857,97 +857,156 @@ Call chain: {chain_str}
         except Exception as e:
             return ToolResult(False, f"Error: {str(e)}")
     
-    def trace_function_return(self, func_name: str, param_name: str, param_value: int) -> ToolResult:
+    def simulate_function(self, func_name: str, params: dict = None) -> ToolResult:
         """
-        Trace what a function returns given a specific parameter value.
-        Analyzes if/else branches to determine which branch is taken.
+        ROBUST C function simulator using ACTUAL C COMPILATION.
+        Compiles and runs the code with gcc/clang for 100% accuracy.
         """
         try:
+            if params is None:
+                params = {}
+            
+            output = f"🔬 Executing {func_name}({', '.join(f'{k}={v}' for k,v in params.items())}) via C compiler:\n\n"
+            
+            # C keywords to filter out
+            C_KEYWORDS = {'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 
+                         'continue', 'return', 'goto', 'sizeof', 'typedef', 'struct', 
+                         'union', 'enum', 'const', 'static', 'extern', 'register', 'volatile'}
+            
+            # Valid C return types
+            C_TYPES = {'int', 'void', 'char', 'short', 'long', 'float', 'double', 
+                      'unsigned', 'signed', 'static', 'const'}
+            
+            def is_valid_function(name, data):
+                """Check if this is a real function, not a keyword or partial code"""
+                if name in C_KEYWORDS:
+                    return False
+                sig = data.get('signature', '')
+                # Signature should start with a type
+                first_word = sig.split()[0] if sig.split() else ''
+                return first_word in C_TYPES
+            
+            # Collect all macros
+            macros = []
+            for macro, value in self.macro_cache.items():
+                if isinstance(value, int):
+                    macros.append(f"#define {macro} {value}")
+                elif isinstance(value, str) and value.strip():
+                    macros.append(f"#define {macro} {value}")
+            
+            # Collect all function bodies we need
+            functions_code = []
+            
+            # Get the target function
             if func_name not in self.call_graph.functions:
                 return ToolResult(False, f"Function '{func_name}' not found")
             
             func_data = self.call_graph.functions[func_name]
+            if not is_valid_function(func_name, func_data):
+                return ToolResult(False, f"'{func_name}' is not a valid function")
+                
+            signature = func_data.get('signature', f'int {func_name}()')
             body = func_data['body']
+            functions_code.append(f"{signature}\n{body}")
             
-            output = f"Tracing {func_name}({param_name}={param_value}):\n\n"
+            # Find functions called by this function and include them
+            for other_name, other_data in self.call_graph.functions.items():
+                if other_name != func_name and other_name in body and is_valid_function(other_name, other_data):
+                    other_sig = other_data.get('signature', f'int {other_name}()')
+                    other_body = other_data['body']
+                    functions_code.insert(0, f"{other_sig}\n{other_body}")
             
-            # Find all if/else conditions and their branches
-            lines = body.split('\n')
-            current_value = None
+            # Build parameter list for function call
+            param_args = ', '.join(str(v) for v in params.values())
             
-            for i, line in enumerate(lines):
-                stripped = line.strip()
-                
-                # Check for if condition
-                if_match = re.search(rf'if\s*\(\s*{param_name}\s*==\s*(\d+)\s*\)', stripped)
-                if if_match:
-                    cond_value = int(if_match.group(1))
-                    result = param_value == cond_value
-                    output += f"  Line {i+1}: if ({param_name} == {cond_value}) → {param_value} == {cond_value} = {result}\n"
-                    
-                    if result:
-                        # Find the assignment in this branch
-                        for j in range(i, min(i+5, len(lines))):
-                            assign_match = re.search(r'(\w+)\s*=\s*([^;]+);', lines[j])
-                            if assign_match and 'if' not in lines[j]:
-                                var = assign_match.group(1)
-                                expr = assign_match.group(2).strip()
-                                output += f"  → Branch taken: {var} = {expr}\n"
-                                
-                                # Try to resolve the expression
-                                resolved = self.evaluate_expression(expr)
-                                if resolved.success:
-                                    output += f"  → Resolved: {expr} = {resolved.data}\n"
-                                    current_value = resolved.data
-                                break
-                
-                # Check for else if
-                elif_match = re.search(rf'else\s+if\s*\(\s*{param_name}\s*==\s*(\d+)\s*\)', stripped)
-                if elif_match and current_value is None:
-                    cond_value = int(elif_match.group(1))
-                    result = param_value == cond_value
-                    output += f"  Line {i+1}: else if ({param_name} == {cond_value}) → {param_value} == {cond_value} = {result}\n"
-                    
-                    if result:
-                        for j in range(i, min(i+5, len(lines))):
-                            assign_match = re.search(r'(\w+)\s*=\s*([^;]+);', lines[j])
-                            if assign_match and 'if' not in lines[j]:
-                                var = assign_match.group(1)
-                                expr = assign_match.group(2).strip()
-                                output += f"  → Branch taken: {var} = {expr}\n"
-                                
-                                resolved = self.evaluate_expression(expr)
-                                if resolved.success:
-                                    output += f"  → Resolved: {expr} = {resolved.data}\n"
-                                    current_value = resolved.data
-                                break
-                
-                # Check for else (no condition)
-                if re.match(r'^\s*}\s*else\s*{', stripped) or stripped == 'else {':
-                    if current_value is None:
-                        output += f"  Line {i+1}: else → Taking else branch (no previous condition matched)\n"
-                        for j in range(i, min(i+5, len(lines))):
-                            assign_match = re.search(r'(\w+)\s*=\s*([^;]+);', lines[j])
-                            if assign_match and 'if' not in lines[j] and 'else' not in lines[j]:
-                                var = assign_match.group(1)
-                                expr = assign_match.group(2).strip()
-                                output += f"  → Branch taken: {var} = {expr}\n"
-                                
-                                resolved = self.evaluate_expression(expr)
-                                if resolved.success:
-                                    output += f"  → Resolved: {expr} = {resolved.data}\n"
-                                    current_value = resolved.data
-                                break
-            
-            if current_value is not None:
-                output += f"\n✅ RETURN VALUE: {current_value}"
+            # Create test program
+            test_code = f"""
+#include <stdio.h>
+
+{chr(10).join(macros)}
+
+{chr(10).join(functions_code)}
+
+int main() {{
+    int result = {func_name}({param_args});
+    printf("RESULT:%d", result);
+    return 0;
+}}
+"""
+            output += f"Generated test code:\n{'-'*40}\n"
+            # Show abbreviated code
+            code_lines = test_code.strip().split('\n')
+            if len(code_lines) > 30:
+                output += '\n'.join(code_lines[:15]) + '\n...\n' + '\n'.join(code_lines[-10:])
             else:
-                output += f"\n⚠️ Could not determine return value"
+                output += test_code
+            output += f"\n{'-'*40}\n\n"
             
-            return ToolResult(True, output, current_value)
+            # Write to temp file
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False) as f:
+                f.write(test_code)
+                c_file = f.name
             
+            exe_file = c_file.replace('.c', '')
+            
+            try:
+                # Compile
+                compile_result = subprocess.run(
+                    ['gcc', '-o', exe_file, c_file, '-w'],  # -w suppresses warnings
+                    capture_output=True, text=True, timeout=10
+                )
+                
+                if compile_result.returncode != 0:
+                    output += f"⚠️ Compilation failed:\n{compile_result.stderr}\n"
+                    # Clean up
+                    os.unlink(c_file)
+                    return ToolResult(False, output)
+                
+                output += "✓ Compiled successfully\n"
+                
+                # Execute
+                run_result = subprocess.run(
+                    [exe_file],
+                    capture_output=True, text=True, timeout=5
+                )
+                
+                # Parse result
+                stdout = run_result.stdout
+                if 'RESULT:' in stdout:
+                    value = int(stdout.split('RESULT:')[1].strip())
+                    output += f"✓ Executed successfully\n\n"
+                    output += f"✅ RETURN VALUE: {value}"
+                    
+                    # Clean up
+                    os.unlink(c_file)
+                    os.unlink(exe_file)
+                    
+                    return ToolResult(True, output, value)
+                else:
+                    output += f"⚠️ Unexpected output: {stdout}\n"
+                    os.unlink(c_file)
+                    os.unlink(exe_file)
+                    return ToolResult(False, output)
+                    
+            except subprocess.TimeoutExpired:
+                output += "⚠️ Execution timed out\n"
+                return ToolResult(False, output)
+            except Exception as e:
+                output += f"⚠️ Error: {str(e)}\n"
+                return ToolResult(False, output)
+            finally:
+                # Clean up temp files
+                if os.path.exists(c_file):
+                    try: os.unlink(c_file)
+                    except: pass
+                if os.path.exists(exe_file):
+                    try: os.unlink(exe_file)
+                    except: pass
+                    
         except Exception as e:
-            return ToolResult(False, f"Error: {str(e)}")
+            import traceback
+            return ToolResult(False, f"Error: {str(e)}\n{traceback.format_exc()}")
     
     def run_command(self, command: str) -> ToolResult:
         """Execute shell command"""
@@ -1009,7 +1068,7 @@ class FileNoAgent:
             "get_call_graph": self.tools.get_call_graph,
             "trace_variable": self.tools.trace_variable,
             "evaluate_expression": self.tools.evaluate_expression,
-            "trace_function_return": self.tools.trace_function_return,
+            "simulate_function": self.tools.simulate_function,
             "find_mfs_open_calls": self.tools.find_mfs_open_calls,
             "run_command": self.tools.run_command,
         }
@@ -1148,16 +1207,15 @@ class FileNoAgent:
             {
                 "type": "function",
                 "function": {
-                    "name": "trace_function_return",
-                    "description": "Trace what a function returns given a specific parameter value. Analyzes if/else branches to determine which branch is taken. VERY IMPORTANT for conditional logic!",
+                    "name": "simulate_function",
+                    "description": "POWERFUL C function simulator. Executes a function with given parameters and returns the result. Handles: nested if/else, multiple parameters, compound conditions (&&, ||, <, >, ==), variable assignments, arithmetic, bitwise ops. Use this to find what a function returns!",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "func_name": {"type": "string", "description": "Name of the function to trace"},
-                            "param_name": {"type": "string", "description": "Name of the parameter (e.g., 'type')"},
-                            "param_value": {"type": "integer", "description": "The computed value of the parameter"}
+                            "func_name": {"type": "string", "description": "Name of the function to simulate"},
+                            "params": {"type": "object", "description": "Parameters as key-value pairs, e.g. {\"type\": 1, \"level\": 3}"}
                         },
-                        "required": ["func_name", "param_name", "param_value"]
+                        "required": ["func_name", "params"]
                     }
                 }
             },
@@ -1210,10 +1268,18 @@ type = 105 - 101;  // Compute: type = 4
 fileno = get_fileno(type);  // Must trace into get_fileno with type=4
 ```
 
-USE the trace_function_return tool! Call it like:
-  trace_function_return(func_name="get_fileno", param_name="type", param_value=4)
+USE the simulate_function tool! It's a POWERFUL C simulator. Call it like:
+  simulate_function(func_name="get_fileno", params={"type": 4})
 
-This tool will evaluate the conditionals and tell you the exact return value.
+For functions with multiple parameters:
+  simulate_function(func_name="calc_fileno", params={"type": 1, "level": 3})
+
+This tool will:
+- Execute the function step by step
+- Evaluate all conditions (==, <, >, <=, >=, &&, ||)
+- Track variable assignments
+- Handle nested if/else
+- Return the exact value
 
 ## OUTPUT FORMAT
 Show your reasoning step by step, then:
