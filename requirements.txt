@@ -1,0 +1,7 @@
+# FileNo Extractor Dependencies
+
+# Azure OpenAI (for AI-based analysis)
+openai>=1.0.0
+
+# Optional: For better environment variable handling
+python-dotenv>=1.0.0
