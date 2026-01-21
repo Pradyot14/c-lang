@@ -1,0 +1,1693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C Call Tracer | Function Flow Visualizer</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --bg-card: #15151f;
+            --accent-cyan: #00d4ff;
+            --accent-purple: #a855f7;
+            --accent-pink: #ec4899;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #2a2a3a;
+            --glow-cyan: 0 0 30px rgba(0, 212, 255, 0.3);
+            --glow-purple: 0 0 30px rgba(168, 85, 247, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'IBM Plex Sans', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(0, 212, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(236, 72, 153, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Header */
+        header {
+            position: relative;
+            z-index: 10;
+            padding: 2rem 3rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+        }
+
+        .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 1.2rem;
+            box-shadow: var(--glow-cyan);
+        }
+
+        .logo h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--text-primary), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo span {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            font-family: 'IBM Plex Sans', sans-serif;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            color: var(--bg-primary);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 40px rgba(0, 212, 255, 0.5);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card);
+            border-color: var(--accent-cyan);
+        }
+
+        /* Main Content */
+        main {
+            position: relative;
+            z-index: 10;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem 3rem;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            margin-bottom: 2rem;
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 16px;
+            padding: 3rem;
+            text-align: center;
+            background: var(--bg-secondary);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-zone::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.05), rgba(168, 85, 247, 0.05));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .upload-zone:hover::before,
+        .upload-zone.drag-over::before {
+            opacity: 1;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.drag-over {
+            border-color: var(--accent-cyan);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .upload-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+
+        .upload-zone h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-zone p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .upload-zone .file-types {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-cyan);
+            background: rgba(0, 212, 255, 0.1);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        /* Target Function Input */
+        .config-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .config-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .config-group label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .config-group input {
+            font-family: 'JetBrains Mono', monospace;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+        }
+
+        .config-group input:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+        }
+
+        .config-group input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* File List */
+        .file-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+        }
+
+        .file-chip {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .file-chip .file-icon {
+            color: var(--accent-cyan);
+        }
+
+        .file-chip .remove-file {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0;
+            font-size: 1rem;
+            transition: color 0.2s ease;
+        }
+
+        .file-chip .remove-file:hover {
+            color: var(--accent-red);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Results Section */
+        .results-section {
+            display: none;
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .stat-icon.files { background: rgba(0, 212, 255, 0.15); color: var(--accent-cyan); }
+        .stat-icon.functions { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); }
+        .stat-icon.calls { background: rgba(236, 72, 153, 0.15); color: var(--accent-pink); }
+        .stat-icon.depth { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+
+        .stat-info h4 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .stat-info p {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        /* Tree Container */
+        .tree-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .tree-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-tertiary);
+        }
+
+        .tree-header h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tree-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .tree-controls button {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s ease;
+        }
+
+        .tree-controls button:hover {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border-color: var(--accent-cyan);
+        }
+
+        #tree-svg {
+            width: 100%;
+            min-height: 600px;
+            background: var(--bg-primary);
+        }
+
+        /* Tree Nodes */
+        .node circle {
+            fill: var(--bg-tertiary);
+            stroke-width: 3px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .node.main circle { stroke: var(--accent-cyan); fill: rgba(0, 212, 255, 0.2); }
+        .node.target circle { stroke: var(--accent-green); fill: rgba(16, 185, 129, 0.2); }
+        .node.intermediate circle { stroke: var(--accent-purple); fill: rgba(168, 85, 247, 0.2); }
+        .node.external circle { stroke: var(--accent-orange); fill: rgba(245, 158, 11, 0.2); }
+
+        .node:hover circle {
+            filter: drop-shadow(0 0 10px currentColor);
+        }
+
+        .node text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            fill: var(--text-primary);
+        }
+
+        .node .file-label {
+            font-size: 10px;
+            fill: var(--text-muted);
+        }
+
+        .link {
+            fill: none;
+            stroke: var(--border-color);
+            stroke-width: 2px;
+        }
+
+        .link.highlight {
+            stroke: var(--accent-cyan);
+            stroke-width: 3px;
+            filter: drop-shadow(0 0 5px var(--accent-cyan));
+        }
+
+        /* Text Tree */
+        .text-tree-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .text-tree-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+        }
+
+        .text-tree-header h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .text-tree {
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.8;
+            max-height: 500px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+        }
+
+        .tree-line {
+            display: flex;
+            align-items: center;
+            padding: 0.25rem 0;
+            transition: background 0.2s ease;
+        }
+
+        .tree-line:hover {
+            background: rgba(0, 212, 255, 0.05);
+        }
+
+        .tree-indent {
+            color: var(--text-muted);
+            white-space: pre;
+        }
+
+        .tree-connector {
+            color: var(--border-color);
+        }
+
+        .tree-function {
+            color: var(--accent-cyan);
+            font-weight: 500;
+        }
+
+        .tree-function.main { color: var(--accent-cyan); }
+        .tree-function.target { color: var(--accent-green); }
+        .tree-function.intermediate { color: var(--accent-purple); }
+
+        .tree-file {
+            color: var(--text-muted);
+            margin-left: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .tree-arrow {
+            color: var(--accent-pink);
+            margin: 0 0.5rem;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 3rem;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--bg-tertiary);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading p {
+            color: var(--text-secondary);
+        }
+
+        /* Error Message */
+        .error-message {
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--accent-red);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .error-message.active {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .error-message .error-icon {
+            font-size: 1.5rem;
+            color: var(--accent-red);
+        }
+
+        .error-message h4 {
+            color: var(--accent-red);
+            margin-bottom: 0.5rem;
+        }
+
+        .error-message p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 2rem;
+            padding: 1rem 1.5rem;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.main { background: var(--accent-cyan); }
+        .legend-dot.target { background: var(--accent-green); }
+        .legend-dot.intermediate { background: var(--accent-purple); }
+        .legend-dot.external { background: var(--accent-orange); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header { padding: 1rem; }
+            main { padding: 1rem; }
+            .config-section { grid-template-columns: 1fr; }
+            .upload-zone { padding: 2rem 1rem; }
+            .stats-bar { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            pointer-events: none;
+            z-index: 1000;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            max-width: 300px;
+        }
+
+        .tooltip .func-name {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+
+        .tooltip .func-file {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+        }
+
+        .tooltip .func-calls {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-gradient"></div>
+
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">C→</div>
+                <div>
+                    <h1>C Call Tracer</h1>
+                    <span>Function Flow Visualizer</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" id="clear-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                    Clear All
+                </button>
+                <button class="btn btn-primary" id="analyze-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    Analyze
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <div class="upload-zone" id="upload-zone">
+                <div class="upload-icon">📁</div>
+                <h3>Drop your C files here</h3>
+                <p>or click to browse and select multiple .c files</p>
+                <span class="file-types">.c files supported</span>
+                <input type="file" id="file-input" multiple accept=".c,.h">
+            </div>
+            <div class="file-list" id="file-list"></div>
+        </div>
+
+        <!-- Config Section -->
+        <div class="config-section">
+            <div class="config-group">
+                <label>Entry Function (Start)</label>
+                <input type="text" id="start-function" placeholder="main" value="main">
+            </div>
+            <div class="config-group">
+                <label>Target Function (End)</label>
+                <input type="text" id="target-function" placeholder="mpf_mfs_open" value="mpf_mfs_open">
+            </div>
+            <button class="btn btn-primary" id="trace-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                Trace Path
+            </button>
+        </div>
+
+        <!-- Error Message -->
+        <div class="error-message" id="error-message">
+            <span class="error-icon">⚠️</span>
+            <div>
+                <h4>Analysis Error</h4>
+                <p id="error-text"></p>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="loading-spinner"></div>
+            <p>Analyzing function calls...</p>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="results-section">
+            <!-- Stats -->
+            <div class="stats-bar">
+                <div class="stat-card">
+                    <div class="stat-icon files">📄</div>
+                    <div class="stat-info">
+                        <h4 id="stat-files">0</h4>
+                        <p>Files Analyzed</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon functions">ƒ</div>
+                    <div class="stat-info">
+                        <h4 id="stat-functions">0</h4>
+                        <p>Functions Found</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon calls">→</div>
+                    <div class="stat-info">
+                        <h4 id="stat-calls">0</h4>
+                        <p>Function Calls</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon depth">↓</div>
+                    <div class="stat-info">
+                        <h4 id="stat-depth">0</h4>
+                        <p>Max Depth</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visual Tree -->
+            <div class="tree-container">
+                <div class="tree-header">
+                    <h3>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="5" r="3"/>
+                            <line x1="12" y1="8" x2="12" y2="14"/>
+                            <circle cx="6" cy="19" r="3"/>
+                            <circle cx="18" cy="19" r="3"/>
+                            <line x1="12" y1="14" x2="6" y2="16"/>
+                            <line x1="12" y1="14" x2="18" y2="16"/>
+                        </svg>
+                        Interactive Call Graph
+                    </h3>
+                    <div class="tree-controls">
+                        <button id="zoom-in">+ Zoom In</button>
+                        <button id="zoom-out">- Zoom Out</button>
+                        <button id="reset-view">Reset View</button>
+                        <button id="expand-all">Expand All</button>
+                        <button id="collapse-all">Collapse All</button>
+                    </div>
+                </div>
+                <svg id="tree-svg"></svg>
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-dot main"></span>
+                        Entry Point (main)
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot target"></span>
+                        Target Function
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot intermediate"></span>
+                        Intermediate Function
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot external"></span>
+                        External/Library
+                    </div>
+                </div>
+            </div>
+
+            <!-- Text Tree -->
+            <div class="text-tree-container">
+                <div class="text-tree-header">
+                    <h3>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 6h16M4 12h16M4 18h7"/>
+                        </svg>
+                        Structured Call Tree
+                    </h3>
+                </div>
+                <pre class="text-tree" id="text-tree"></pre>
+            </div>
+        </div>
+    </main>
+
+    <div class="tooltip" id="tooltip" style="display: none;"></div>
+
+    <script>
+        // ==========================================
+        // C CODE PARSER - ROBUST IMPLEMENTATION
+        // ==========================================
+        
+        class CCodeParser {
+            constructor() {
+                this.functions = new Map(); // funcName -> { file, startLine, endLine, body, calls }
+                this.functionCalls = new Map(); // funcName -> [calledFunctions]
+                this.fileContents = new Map(); // fileName -> content
+            }
+
+            // Remove comments from C code
+            removeComments(code) {
+                // Remove single-line comments
+                code = code.replace(/\/\/.*$/gm, '');
+                // Remove multi-line comments
+                code = code.replace(/\/\*[\s\S]*?\*\//g, '');
+                return code;
+            }
+
+            // Remove string literals to avoid false positives
+            removeStrings(code) {
+                // Remove string literals (handling escaped quotes)
+                code = code.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+                // Remove character literals
+                code = code.replace(/'(?:[^'\\]|\\.)*'/g, "''");
+                return code;
+            }
+
+            // Preprocess code
+            preprocess(code) {
+                code = this.removeComments(code);
+                code = this.removeStrings(code);
+                return code;
+            }
+
+            // Find matching brace
+            findMatchingBrace(code, startIndex) {
+                let depth = 1;
+                let i = startIndex;
+                while (i < code.length && depth > 0) {
+                    if (code[i] === '{') depth++;
+                    else if (code[i] === '}') depth--;
+                    i++;
+                }
+                return depth === 0 ? i - 1 : -1;
+            }
+
+            // Extract function definitions
+            extractFunctions(code, fileName) {
+                const preprocessed = this.preprocess(code);
+                const functions = [];
+
+                // Regex to match function definitions
+                // Handles: return_type func_name(params) { ... }
+                // Also handles: static, inline, extern, const, etc.
+                const funcDefRegex = /(?:(?:static|inline|extern|const|unsigned|signed|long|short|volatile|register|restrict|_Noreturn|__attribute__\s*\([^)]*\))\s+)*([a-zA-Z_][a-zA-Z0-9_]*(?:\s*\*+)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*\{/g;
+
+                let match;
+                while ((match = funcDefRegex.exec(preprocessed)) !== null) {
+                    const returnType = match[1].trim();
+                    const funcName = match[2].trim();
+                    const params = match[3].trim();
+                    const startIndex = match.index;
+                    const bodyStart = preprocessed.indexOf('{', startIndex);
+                    
+                    // Find matching closing brace
+                    const bodyEnd = this.findMatchingBrace(preprocessed, bodyStart + 1);
+                    
+                    if (bodyEnd !== -1) {
+                        const body = preprocessed.substring(bodyStart + 1, bodyEnd);
+                        
+                        // Count line numbers
+                        const startLine = (preprocessed.substring(0, startIndex).match(/\n/g) || []).length + 1;
+                        const endLine = (preprocessed.substring(0, bodyEnd).match(/\n/g) || []).length + 1;
+
+                        // Extract function calls from body
+                        const calls = this.extractFunctionCalls(body);
+
+                        functions.push({
+                            name: funcName,
+                            returnType,
+                            params,
+                            file: fileName,
+                            startLine,
+                            endLine,
+                            body,
+                            calls
+                        });
+                    }
+                }
+
+                return functions;
+            }
+
+            // Extract function calls from a code block
+            extractFunctionCalls(code) {
+                const calls = new Set();
+                
+                // Regex to match function calls
+                // func_name( - but not if preceded by type keywords or followed by type patterns
+                const callRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+                
+                // Keywords to exclude
+                const keywords = new Set([
+                    'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'return',
+                    'sizeof', 'typeof', 'alignof', 'static_assert', '_Static_assert',
+                    'int', 'char', 'float', 'double', 'void', 'long', 'short',
+                    'unsigned', 'signed', 'const', 'volatile', 'register', 'extern',
+                    'static', 'inline', 'struct', 'union', 'enum', 'typedef',
+                    'goto', 'break', 'continue', 'default', 'NULL', 'true', 'false',
+                    '__attribute__', '__asm__', '__typeof__', 'asm'
+                ]);
+
+                let match;
+                while ((match = callRegex.exec(code)) !== null) {
+                    const funcName = match[1];
+                    if (!keywords.has(funcName)) {
+                        calls.add(funcName);
+                    }
+                }
+
+                return Array.from(calls);
+            }
+
+            // Parse a single file
+            parseFile(content, fileName) {
+                this.fileContents.set(fileName, content);
+                const functions = this.extractFunctions(content, fileName);
+                
+                for (const func of functions) {
+                    // Store function definition
+                    if (!this.functions.has(func.name)) {
+                        this.functions.set(func.name, func);
+                    }
+                    
+                    // Store function calls
+                    this.functionCalls.set(func.name, func.calls);
+                }
+
+                return functions;
+            }
+
+            // Parse multiple files
+            parseFiles(files) {
+                const allFunctions = [];
+                for (const [fileName, content] of files) {
+                    const funcs = this.parseFile(content, fileName);
+                    allFunctions.push(...funcs);
+                }
+                return allFunctions;
+            }
+
+            // Get all defined functions
+            getDefinedFunctions() {
+                return Array.from(this.functions.keys());
+            }
+
+            // Get function info
+            getFunctionInfo(funcName) {
+                return this.functions.get(funcName);
+            }
+
+            // Get calls made by a function
+            getCalls(funcName) {
+                return this.functionCalls.get(funcName) || [];
+            }
+        }
+
+        // ==========================================
+        // CALL GRAPH BUILDER
+        // ==========================================
+
+        class CallGraphBuilder {
+            constructor(parser) {
+                this.parser = parser;
+                this.graph = new Map(); // funcName -> Set of called functions
+                this.reverseGraph = new Map(); // funcName -> Set of callers
+            }
+
+            // Build the complete call graph
+            buildGraph() {
+                for (const [funcName, calls] of this.parser.functionCalls) {
+                    if (!this.graph.has(funcName)) {
+                        this.graph.set(funcName, new Set());
+                    }
+                    
+                    for (const calledFunc of calls) {
+                        this.graph.get(funcName).add(calledFunc);
+                        
+                        // Build reverse graph
+                        if (!this.reverseGraph.has(calledFunc)) {
+                            this.reverseGraph.set(calledFunc, new Set());
+                        }
+                        this.reverseGraph.get(calledFunc).add(funcName);
+                    }
+                }
+            }
+
+            // Find all paths from start to target using DFS
+            findPaths(start, target, maxDepth = 50) {
+                const paths = [];
+                const visited = new Set();
+
+                const dfs = (current, path) => {
+                    if (path.length > maxDepth) return;
+                    
+                    if (current === target) {
+                        paths.push([...path]);
+                        return;
+                    }
+
+                    if (visited.has(current)) return;
+                    visited.add(current);
+
+                    const calls = this.graph.get(current) || new Set();
+                    for (const next of calls) {
+                        dfs(next, [...path, next]);
+                    }
+
+                    visited.delete(current);
+                };
+
+                dfs(start, [start]);
+                return paths;
+            }
+
+            // Build a tree structure from start to target
+            buildTree(start, target, maxDepth = 30) {
+                const tree = {
+                    name: start,
+                    file: this.parser.getFunctionInfo(start)?.file || 'unknown',
+                    type: 'main',
+                    children: [],
+                    _visited: new Set([start])
+                };
+
+                const buildSubtree = (node, depth) => {
+                    if (depth > maxDepth) return;
+                    
+                    const calls = this.graph.get(node.name) || new Set();
+                    
+                    for (const calledFunc of calls) {
+                        if (node._visited.has(calledFunc)) continue;
+                        
+                        const funcInfo = this.parser.getFunctionInfo(calledFunc);
+                        const isTarget = calledFunc === target;
+                        const isDefined = this.parser.functions.has(calledFunc);
+                        
+                        const childNode = {
+                            name: calledFunc,
+                            file: funcInfo?.file || 'external',
+                            type: isTarget ? 'target' : (isDefined ? 'intermediate' : 'external'),
+                            children: [],
+                            _visited: new Set([...node._visited, calledFunc])
+                        };
+
+                        node.children.push(childNode);
+
+                        // Only recurse if it's a defined function and not the target
+                        if (isDefined && !isTarget) {
+                            buildSubtree(childNode, depth + 1);
+                        }
+                    }
+                };
+
+                buildSubtree(tree, 0);
+                
+                // Clean up _visited property
+                const cleanTree = (node) => {
+                    delete node._visited;
+                    for (const child of node.children) {
+                        cleanTree(child);
+                    }
+                    return node;
+                };
+
+                return cleanTree(tree);
+            }
+
+            // Build tree showing only paths to target
+            buildPathTree(start, target, maxDepth = 30) {
+                const allPaths = this.findPaths(start, target, maxDepth);
+                
+                if (allPaths.length === 0) {
+                    return null;
+                }
+
+                // Collect all functions on paths to target
+                const functionsOnPath = new Set();
+                for (const path of allPaths) {
+                    for (const func of path) {
+                        functionsOnPath.add(func);
+                    }
+                }
+
+                // Build tree with only relevant branches
+                const buildFilteredTree = (funcName, visited) => {
+                    if (visited.has(funcName)) return null;
+                    visited.add(funcName);
+
+                    const funcInfo = this.parser.getFunctionInfo(funcName);
+                    const isTarget = funcName === target;
+                    const isDefined = this.parser.functions.has(funcName);
+
+                    const node = {
+                        name: funcName,
+                        file: funcInfo?.file || 'external',
+                        type: funcName === start ? 'main' : (isTarget ? 'target' : (isDefined ? 'intermediate' : 'external')),
+                        children: []
+                    };
+
+                    if (!isTarget) {
+                        const calls = this.graph.get(funcName) || new Set();
+                        for (const calledFunc of calls) {
+                            // Only include if it's on a path to target
+                            if (functionsOnPath.has(calledFunc)) {
+                                const child = buildFilteredTree(calledFunc, new Set(visited));
+                                if (child) {
+                                    node.children.push(child);
+                                }
+                            }
+                        }
+                    }
+
+                    return node;
+                };
+
+                return buildFilteredTree(start, new Set());
+            }
+        }
+
+        // ==========================================
+        // TREE VISUALIZER (D3-like but vanilla JS)
+        // ==========================================
+
+        class TreeVisualizer {
+            constructor(svgElement) {
+                this.svg = svgElement;
+                this.width = 1200;
+                this.height = 800;
+                this.nodeRadius = 25;
+                this.levelHeight = 100;
+                this.nodeWidth = 180;
+                this.transform = { x: 0, y: 0, scale: 1 };
+                this.nodes = [];
+                this.links = [];
+
+                this.setupSVG();
+                this.setupInteractions();
+            }
+
+            setupSVG() {
+                this.svg.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`);
+                this.svg.innerHTML = `
+                    <defs>
+                        <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                            <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                        <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                            <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#2a2a3a"/>
+                        </marker>
+                    </defs>
+                    <g class="zoom-group">
+                        <g class="links-group"></g>
+                        <g class="nodes-group"></g>
+                    </g>
+                `;
+            }
+
+            setupInteractions() {
+                let isPanning = false;
+                let startX, startY;
+
+                this.svg.addEventListener('mousedown', (e) => {
+                    if (e.target === this.svg || e.target.closest('.zoom-group')) {
+                        isPanning = true;
+                        startX = e.clientX - this.transform.x;
+                        startY = e.clientY - this.transform.y;
+                    }
+                });
+
+                window.addEventListener('mousemove', (e) => {
+                    if (isPanning) {
+                        this.transform.x = e.clientX - startX;
+                        this.transform.y = e.clientY - startY;
+                        this.applyTransform();
+                    }
+                });
+
+                window.addEventListener('mouseup', () => {
+                    isPanning = false;
+                });
+
+                this.svg.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                    this.transform.scale *= delta;
+                    this.transform.scale = Math.max(0.1, Math.min(3, this.transform.scale));
+                    this.applyTransform();
+                });
+            }
+
+            applyTransform() {
+                const zoomGroup = this.svg.querySelector('.zoom-group');
+                zoomGroup.setAttribute('transform', 
+                    `translate(${this.transform.x}, ${this.transform.y}) scale(${this.transform.scale})`
+                );
+            }
+
+            // Calculate tree layout
+            calculateLayout(tree) {
+                const nodes = [];
+                const links = [];
+                let nodeId = 0;
+
+                // First pass: assign levels and count nodes per level
+                const levelCounts = {};
+                const assignLevels = (node, level) => {
+                    node._level = level;
+                    node._id = nodeId++;
+                    levelCounts[level] = (levelCounts[level] || 0) + 1;
+                    for (const child of node.children || []) {
+                        assignLevels(child, level + 1);
+                    }
+                };
+                assignLevels(tree, 0);
+
+                // Calculate positions
+                const levelPositions = {};
+                const assignPositions = (node) => {
+                    const level = node._level;
+                    const count = levelCounts[level];
+                    const position = levelPositions[level] || 0;
+                    levelPositions[level] = position + 1;
+
+                    const totalWidth = count * this.nodeWidth;
+                    const startX = (this.width - totalWidth) / 2 + this.nodeWidth / 2;
+                    
+                    node._x = startX + position * this.nodeWidth;
+                    node._y = 80 + level * this.levelHeight;
+
+                    nodes.push({
+                        id: node._id,
+                        name: node.name,
+                        file: node.file,
+                        type: node.type,
+                        x: node._x,
+                        y: node._y,
+                        children: node.children
+                    });
+
+                    for (const child of node.children || []) {
+                        assignPositions(child);
+                        links.push({
+                            source: { x: node._x, y: node._y },
+                            target: { x: child._x, y: child._y }
+                        });
+                    }
+                };
+                assignPositions(tree);
+
+                return { nodes, links };
+            }
+
+            // Render the tree
+            render(tree) {
+                const { nodes, links } = this.calculateLayout(tree);
+                this.nodes = nodes;
+                this.links = links;
+
+                // Update SVG dimensions based on tree size
+                const maxX = Math.max(...nodes.map(n => n.x)) + 100;
+                const maxY = Math.max(...nodes.map(n => n.y)) + 100;
+                this.width = Math.max(1200, maxX);
+                this.height = Math.max(600, maxY);
+                this.svg.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`);
+
+                // Render links
+                const linksGroup = this.svg.querySelector('.links-group');
+                linksGroup.innerHTML = links.map(link => `
+                    <path class="link" d="M${link.source.x},${link.source.y + this.nodeRadius}
+                        C${link.source.x},${(link.source.y + link.target.y) / 2}
+                        ${link.target.x},${(link.source.y + link.target.y) / 2}
+                        ${link.target.x},${link.target.y - this.nodeRadius}"
+                        marker-end="url(#arrowhead)"/>
+                `).join('');
+
+                // Render nodes
+                const nodesGroup = this.svg.querySelector('.nodes-group');
+                nodesGroup.innerHTML = nodes.map(node => `
+                    <g class="node ${node.type}" transform="translate(${node.x}, ${node.y})"
+                       data-name="${node.name}" data-file="${node.file}">
+                        <circle r="${this.nodeRadius}" filter="${node.type === 'target' ? 'url(#glow-green)' : (node.type === 'main' ? 'url(#glow-cyan)' : '')}"/>
+                        <text dy="0.35em" text-anchor="middle" class="func-name">${this.truncate(node.name, 12)}</text>
+                        <text dy="2.5em" text-anchor="middle" class="file-label">${this.truncate(node.file, 15)}</text>
+                    </g>
+                `).join('');
+
+                // Add hover effects
+                this.setupNodeInteractions();
+
+                // Center view
+                this.resetView();
+            }
+
+            truncate(str, maxLen) {
+                return str.length > maxLen ? str.substring(0, maxLen - 2) + '..' : str;
+            }
+
+            setupNodeInteractions() {
+                const tooltip = document.getElementById('tooltip');
+                const nodes = this.svg.querySelectorAll('.node');
+
+                nodes.forEach(node => {
+                    node.addEventListener('mouseenter', (e) => {
+                        const name = node.dataset.name;
+                        const file = node.dataset.file;
+                        
+                        tooltip.innerHTML = `
+                            <div class="func-name">${name}()</div>
+                            <div class="func-file">📄 ${file}</div>
+                        `;
+                        tooltip.style.display = 'block';
+                        
+                        const rect = node.getBoundingClientRect();
+                        tooltip.style.left = rect.left + rect.width / 2 - tooltip.offsetWidth / 2 + 'px';
+                        tooltip.style.top = rect.top - tooltip.offsetHeight - 10 + 'px';
+                    });
+
+                    node.addEventListener('mouseleave', () => {
+                        tooltip.style.display = 'none';
+                    });
+                });
+            }
+
+            zoomIn() {
+                this.transform.scale *= 1.2;
+                this.applyTransform();
+            }
+
+            zoomOut() {
+                this.transform.scale *= 0.8;
+                this.applyTransform();
+            }
+
+            resetView() {
+                this.transform = { x: 0, y: 0, scale: 1 };
+                this.applyTransform();
+            }
+        }
+
+        // ==========================================
+        // TEXT TREE GENERATOR
+        // ==========================================
+
+        class TextTreeGenerator {
+            generate(tree, targetFunc) {
+                const lines = [];
+                
+                const render = (node, prefix = '', isLast = true, depth = 0) => {
+                    const connector = depth === 0 ? '' : (isLast ? '└── ' : '├── ');
+                    const funcClass = node.type;
+                    const arrow = node.name === targetFunc ? ' ★' : '';
+                    
+                    lines.push({
+                        indent: prefix,
+                        connector,
+                        funcName: node.name,
+                        funcClass,
+                        file: node.file,
+                        arrow
+                    });
+
+                    const childPrefix = prefix + (depth === 0 ? '' : (isLast ? '    ' : '│   '));
+                    const children = node.children || [];
+                    
+                    children.forEach((child, index) => {
+                        render(child, childPrefix, index === children.length - 1, depth + 1);
+                    });
+                };
+
+                render(tree);
+                return lines;
+            }
+
+            renderHTML(lines) {
+                return lines.map(line => `
+                    <div class="tree-line">
+                        <span class="tree-indent">${line.indent}</span>
+                        <span class="tree-connector">${line.connector}</span>
+                        <span class="tree-function ${line.funcClass}">${line.funcName}()</span>
+                        <span class="tree-file">${line.file}</span>
+                        ${line.arrow ? `<span class="tree-arrow">${line.arrow}</span>` : ''}
+                    </div>
+                `).join('');
+            }
+        }
+
+        // ==========================================
+        // MAIN APPLICATION
+        // ==========================================
+
+        class CCallTracerApp {
+            constructor() {
+                this.files = new Map();
+                this.parser = new CCodeParser();
+                this.graphBuilder = null;
+                this.visualizer = null;
+                this.textGenerator = new TextTreeGenerator();
+
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                // File upload zone
+                const uploadZone = document.getElementById('upload-zone');
+                const fileInput = document.getElementById('file-input');
+
+                uploadZone.addEventListener('click', () => fileInput.click());
+                uploadZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadZone.classList.add('drag-over');
+                });
+                uploadZone.addEventListener('dragleave', () => {
+                    uploadZone.classList.remove('drag-over');
+                });
+                uploadZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadZone.classList.remove('drag-over');
+                    this.handleFiles(e.dataTransfer.files);
+                });
+
+                fileInput.addEventListener('change', (e) => {
+                    this.handleFiles(e.target.files);
+                });
+
+                // Buttons
+                document.getElementById('analyze-btn').addEventListener('click', () => this.analyze());
+                document.getElementById('trace-btn').addEventListener('click', () => this.analyze());
+                document.getElementById('clear-btn').addEventListener('click', () => this.clearAll());
+
+                // Tree controls
+                document.getElementById('zoom-in').addEventListener('click', () => {
+                    if (this.visualizer) this.visualizer.zoomIn();
+                });
+                document.getElementById('zoom-out').addEventListener('click', () => {
+                    if (this.visualizer) this.visualizer.zoomOut();
+                });
+                document.getElementById('reset-view').addEventListener('click', () => {
+                    if (this.visualizer) this.visualizer.resetView();
+                });
+            }
+
+            handleFiles(fileList) {
+                Array.from(fileList).forEach(file => {
+                    if (file.name.endsWith('.c') || file.name.endsWith('.h')) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.files.set(file.name, e.target.result);
+                            this.updateFileList();
+                        };
+                        reader.readAsText(file);
+                    }
+                });
+            }
+
+            updateFileList() {
+                const fileList = document.getElementById('file-list');
+                fileList.innerHTML = Array.from(this.files.keys()).map(name => `
+                    <div class="file-chip">
+                        <span class="file-icon">📄</span>
+                        <span>${name}</span>
+                        <button class="remove-file" data-file="${name}">×</button>
+                    </div>
+                `).join('');
+
+                // Add remove handlers
+                fileList.querySelectorAll('.remove-file').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.files.delete(btn.dataset.file);
+                        this.updateFileList();
+                    });
+                });
+            }
+
+            analyze() {
+                const startFunc = document.getElementById('start-function').value.trim() || 'main';
+                const targetFunc = document.getElementById('target-function').value.trim() || 'mpf_mfs_open';
+
+                this.hideError();
+                
+                if (this.files.size === 0) {
+                    this.showError('Please upload at least one .c file to analyze.');
+                    return;
+                }
+
+                this.showLoading(true);
+
+                // Use setTimeout to allow UI to update
+                setTimeout(() => {
+                    try {
+                        // Parse all files
+                        this.parser = new CCodeParser();
+                        this.parser.parseFiles(this.files);
+
+                        // Check if start function exists
+                        if (!this.parser.functions.has(startFunc)) {
+                            this.showError(`Entry function "${startFunc}" not found in uploaded files. Available functions: ${this.parser.getDefinedFunctions().slice(0, 10).join(', ')}...`);
+                            this.showLoading(false);
+                            return;
+                        }
+
+                        // Build call graph
+                        this.graphBuilder = new CallGraphBuilder(this.parser);
+                        this.graphBuilder.buildGraph();
+
+                        // Build tree (full tree or path-filtered)
+                        let tree = this.graphBuilder.buildPathTree(startFunc, targetFunc);
+                        
+                        if (!tree) {
+                            // If no path to target, show full tree
+                            tree = this.graphBuilder.buildTree(startFunc, targetFunc);
+                            console.log(`No direct path found to ${targetFunc}, showing full call tree from ${startFunc}`);
+                        }
+
+                        // Update stats
+                        this.updateStats(tree, targetFunc);
+
+                        // Render visual tree
+                        this.visualizer = new TreeVisualizer(document.getElementById('tree-svg'));
+                        this.visualizer.render(tree);
+
+                        // Render text tree
+                        const textLines = this.textGenerator.generate(tree, targetFunc);
+                        document.getElementById('text-tree').innerHTML = this.textGenerator.renderHTML(textLines);
+
+                        // Show results
+                        document.getElementById('results-section').classList.add('active');
+                        this.showLoading(false);
+
+                    } catch (error) {
+                        console.error('Analysis error:', error);
+                        this.showError(`Analysis failed: ${error.message}`);
+                        this.showLoading(false);
+                    }
+                }, 100);
+            }
+
+            updateStats(tree, targetFunc) {
+                let functionCount = 0;
+                let callCount = 0;
+                let maxDepth = 0;
+                let foundTarget = false;
+
+                const traverse = (node, depth) => {
+                    functionCount++;
+                    maxDepth = Math.max(maxDepth, depth);
+                    
+                    if (node.name === targetFunc) foundTarget = true;
+                    
+                    for (const child of node.children || []) {
+                        callCount++;
+                        traverse(child, depth + 1);
+                    }
+                };
+                traverse(tree, 0);
+
+                document.getElementById('stat-files').textContent = this.files.size;
+                document.getElementById('stat-functions').textContent = functionCount;
+                document.getElementById('stat-calls').textContent = callCount;
+                document.getElementById('stat-depth').textContent = maxDepth;
+            }
+
+            clearAll() {
+                this.files.clear();
+                this.updateFileList();
+                document.getElementById('results-section').classList.remove('active');
+                this.hideError();
+            }
+
+            showLoading(show) {
+                document.getElementById('loading').classList.toggle('active', show);
+            }
+
+            showError(message) {
+                document.getElementById('error-text').textContent = message;
+                document.getElementById('error-message').classList.add('active');
+            }
+
+            hideError() {
+                document.getElementById('error-message').classList.remove('active');
+            }
+        }
+
+        // Initialize app
+        const app = new CCallTracerApp();
+    </script>
+</body>
+</html>
