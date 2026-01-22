@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise C Call Tracer - Complete Suite</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --cyan: #58a6ff;
+            --green: #3fb950;
+            --purple: #a371f7;
+            --pink: #f778ba;
+            --orange: #d29922;
+            --red: #f85149;
+            --yellow: #e3b341;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg-primary); color: var(--text); min-height: 100vh; }
+        .container { max-width: 1800px; margin: 0 auto; padding: 15px; }
+        
+        header { text-align: center; padding: 15px 0; border-bottom: 1px solid var(--border); margin-bottom: 15px; }
+        h1 { color: var(--cyan); font-size: 1.6rem; margin-bottom: 5px; }
+        .subtitle { color: var(--text-muted); font-size: 0.85rem; }
+        
+        .main-grid { display: grid; grid-template-columns: 380px 1fr; gap: 15px; }
+        @media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
+        
+        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+        .card-title { color: var(--cyan); font-size: 0.9rem; font-weight: 600; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+        
+        /* Phase Indicator */
+        .phases { display: flex; gap: 6px; margin-bottom: 12px; }
+        .phase { flex: 1; text-align: center; padding: 8px 4px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.7rem; color: var(--text-muted); border: 1px solid transparent; transition: all 0.3s; }
+        .phase.active { border-color: var(--cyan); color: var(--cyan); background: rgba(88,166,255,0.1); }
+        .phase.done { border-color: var(--green); color: var(--green); background: rgba(63,185,80,0.1); }
+        .phase-num { display: block; font-size: 1rem; font-weight: 700; }
+        
+        /* Upload Zones */
+        .upload-section { margin-bottom: 12px; }
+        .upload-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; }
+        .upload-count { background: var(--bg-tertiary); padding: 2px 8px; border-radius: 10px; color: var(--cyan); }
+        
+        .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 18px 12px; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .upload-zone:hover { border-color: var(--cyan); background: rgba(88,166,255,0.03); }
+        .upload-zone.has-files { border-color: var(--green); border-style: solid; }
+        .upload-zone p { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 6px; }
+        .upload-zone .badges { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; }
+        .badge { background: var(--bg-tertiary); color: var(--cyan); padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-family: monospace; }
+        .badge.registry { color: var(--yellow); }
+        .badge.makefile { color: var(--orange); }
+        
+        .file-list { max-height: 120px; overflow-y: auto; margin-top: 8px; }
+        .file-item { display: flex; justify-content: space-between; align-items: center; background: var(--bg-tertiary); padding: 5px 8px; border-radius: 4px; margin-bottom: 3px; font-size: 0.75rem; font-family: monospace; }
+        .file-item .type { padding: 1px 5px; border-radius: 3px; font-size: 0.65rem; margin-right: 6px; font-weight: 600; }
+        .type.c { background: rgba(63,185,80,0.2); color: var(--green); }
+        .type.h { background: rgba(163,113,247,0.2); color: var(--purple); }
+        .type.mk { background: rgba(210,153,34,0.2); color: var(--orange); }
+        .type.json { background: rgba(227,179,65,0.2); color: var(--yellow); }
+        .file-item .remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 0 4px; }
+        .file-item .remove:hover { color: var(--red); }
+        
+        /* Forms */
+        .form-group { margin-bottom: 10px; }
+        .form-group label { display: block; color: var(--text-muted); font-size: 0.75rem; margin-bottom: 4px; }
+        .form-group input, .form-group select { width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; color: var(--text); font-family: monospace; font-size: 0.85rem; }
+        .form-group input:focus { outline: none; border-color: var(--cyan); }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        
+        .options { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+        .option { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-muted); cursor: pointer; }
+        .option input { width: 14px; height: 14px; accent-color: var(--cyan); }
+        
+        .btn { width: 100%; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+        .btn-primary { background: linear-gradient(135deg, var(--cyan), var(--purple)); color: #fff; }
+        .btn-primary:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text); border: 1px solid var(--border); margin-top: 6px; }
+        .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        
+        /* Stats */
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .stat { background: var(--bg-tertiary); padding: 8px; border-radius: 4px; text-align: center; }
+        .stat-val { font-size: 1.2rem; font-weight: 700; color: var(--cyan); }
+        .stat-label { font-size: 0.65rem; color: var(--text-muted); }
+        
+        /* Tabs & Output */
+        .tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+        .tab { padding: 7px 14px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; transition: all 0.2s; }
+        .tab:hover { border-color: var(--cyan); color: var(--text); }
+        .tab.active { background: rgba(88,166,255,0.1); border-color: var(--cyan); color: var(--cyan); }
+        
+        .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: 4px; font-size: 0.7rem; }
+        .legend-item { display: flex; align-items: center; gap: 5px; color: var(--text-muted); }
+        .legend-color { width: 10px; height: 10px; border-radius: 2px; }
+        
+        .output { background: var(--bg-tertiary); border-radius: 6px; padding: 14px; min-height: 450px; max-height: 550px; overflow: auto; font-family: 'Monaco', 'Menlo', 'Consolas', monospace; font-size: 0.78rem; line-height: 1.5; white-space: pre-wrap; }
+        
+        .progress { padding: 30px; text-align: center; }
+        .progress-bar { height: 6px; background: var(--border); border-radius: 3px; margin: 12px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--cyan), var(--purple)); transition: width 0.3s; }
+        .progress-text { color: var(--text-muted); font-size: 0.85rem; }
+        .progress-phase { color: var(--cyan); font-weight: 600; margin-bottom: 8px; }
+        
+        .error { background: rgba(248,81,73,0.1); border: 1px solid var(--red); border-radius: 6px; padding: 14px; color: var(--red); }
+        .warning { background: rgba(210,153,34,0.1); border: 1px solid var(--orange); border-radius: 6px; padding: 14px; color: var(--orange); margin-bottom: 10px; }
+        
+        /* Color classes */
+        .c-entry { color: var(--cyan); }
+        .c-target { color: var(--green); font-weight: bold; }
+        .c-inter { color: var(--purple); }
+        .c-macro { color: var(--pink); }
+        .c-ptr { color: #79c0ff; }
+        .c-ext { color: var(--orange); }
+        .c-reg { color: var(--yellow); }
+        .c-muted { color: var(--text-muted); }
+        .c-file { color: var(--text-muted); font-style: italic; }
+        
+        /* Path items */
+        .path-item { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 6px; }
+        .path-header { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .path-num { background: var(--cyan); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+        .path-chain { font-family: monospace; font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+        .path-chain .func { background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px; }
+        .path-chain .func.target { background: rgba(63,185,80,0.2); color: var(--green); }
+        .path-chain .func.macro { border: 1px dashed var(--pink); }
+        .path-chain .func.ptr { border: 1px dashed var(--cyan); }
+        .path-chain .func.reg { border: 1px dashed var(--yellow); }
+        .path-chain .arrow { color: var(--cyan); }
+        
+        /* Dependency tree */
+        .dep-file { margin-bottom: 10px; }
+        .dep-header { color: var(--green); font-weight: 600; margin-bottom: 4px; }
+        .dep-includes { padding-left: 16px; border-left: 2px solid var(--border); }
+        .dep-inc { padding: 2px 0; font-size: 0.75rem; }
+        .dep-inc.resolved { color: var(--purple); }
+        .dep-inc.unresolved { color: var(--orange); }
+        .dep-inc .path { color: var(--text-muted); margin-left: 8px; }
+        
+        /* Registry items */
+        .reg-item { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+        .reg-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .reg-name { color: var(--yellow); font-family: monospace; font-weight: 600; }
+        .reg-badge { background: rgba(227,179,65,0.2); color: var(--yellow); padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; }
+        .reg-proto { background: var(--bg-tertiary); padding: 6px 8px; border-radius: 4px; font-family: monospace; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 6px; overflow-x: auto; }
+        .reg-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.7rem; color: var(--text-muted); }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-tertiary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--cyan); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔬 Enterprise C Call Tracer</h1>
+            <p class="subtitle">Makefile Parsing • Recursive Header Resolution • Function Registry • Complete Analysis</p>
+        </header>
+        
+        <div class="main-grid">
+            <div class="sidebar">
+                <!-- Phase Indicator -->
+                <div class="card">
+                    <div class="phases">
+                        <div class="phase" id="phase1"><span class="phase-num">1</span>Dependencies</div>
+                        <div class="phase" id="phase2"><span class="phase-num">2</span>Registry</div>
+                        <div class="phase" id="phase3"><span class="phase-num">3</span>Parse</div>
+                        <div class="phase" id="phase4"><span class="phase-num">4</span>Trace</div>
+                    </div>
+                    
+                    <!-- Project Files Upload -->
+                    <div class="upload-section">
+                        <div class="upload-label">
+                            <span>📁 Project Files</span>
+                            <span class="upload-count" id="projectCount">0 files</span>
+                        </div>
+                        <div class="upload-zone" id="projectZone">
+                            <p>Drop source files & Makefile</p>
+                            <div class="badges">
+                                <span class="badge">.c</span>
+                                <span class="badge">.h</span>
+                                <span class="badge makefile">Makefile</span>
+                            </div>
+                            <input type="file" id="projectInput" multiple accept=".c,.h,.cpp,.hpp,.cc,.hh,Makefile,.mk" hidden>
+                        </div>
+                        <div class="file-list" id="projectList"></div>
+                    </div>
+                    
+                    <!-- Registry Upload -->
+                    <div class="upload-section">
+                        <div class="upload-label">
+                            <span>📋 Function Registry (optional)</span>
+                            <span class="upload-count" id="registryCount">0 files</span>
+                        </div>
+                        <div class="upload-zone" id="registryZone">
+                            <p>Function metadata JSON</p>
+                            <div class="badges">
+                                <span class="badge registry">.json</span>
+                            </div>
+                            <input type="file" id="registryInput" accept=".json" hidden>
+                        </div>
+                        <div class="file-list" id="registryList"></div>
+                    </div>
+                </div>
+                
+                <!-- Configuration -->
+                <div class="card">
+                    <div class="card-title">⚙️ Configuration</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Entry Function</label>
+                            <input type="text" id="entryFunc" value="main">
+                        </div>
+                        <div class="form-group">
+                            <label>Target Function</label>
+                            <input type="text" id="targetFunc" value="mpf_mfs_open">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Include Paths (comma-separated)</label>
+                        <input type="text" id="includePaths" placeholder="./include, ./src, ./lib">
+                    </div>
+                    
+                    <div class="options">
+                        <label class="option"><input type="checkbox" id="optMakefile" checked> Parse Makefile</label>
+                        <label class="option"><input type="checkbox" id="optRecursive" checked> Recursive headers</label>
+                        <label class="option"><input type="checkbox" id="optMacros" checked> Expand macros</label>
+                        <label class="option"><input type="checkbox" id="optPointers" checked> Track func pointers</label>
+                        <label class="option"><input type="checkbox" id="optRegistry" checked> Use registry</label>
+                        <label class="option"><input type="checkbox" id="optAllPaths" checked> Find all paths</label>
+                    </div>
+                    
+                    <button class="btn btn-primary" id="analyzeBtn" disabled>🔬 Analyze Call Chain</button>
+                    <div class="btn-row">
+                        <button class="btn btn-secondary" id="clearBtn">Clear All</button>
+                        <button class="btn btn-secondary" id="exportBtn">Export Results</button>
+                    </div>
+                </div>
+                
+                <!-- Stats -->
+                <div class="card" id="statsCard" style="display:none;">
+                    <div class="card-title">📊 Analysis Results</div>
+                    <div class="stats">
+                        <div class="stat"><div class="stat-val" id="statFiles">0</div><div class="stat-label">Files</div></div>
+                        <div class="stat"><div class="stat-val" id="statFuncs">0</div><div class="stat-label">Functions</div></div>
+                        <div class="stat"><div class="stat-val" id="statHeaders">0</div><div class="stat-label">Headers</div></div>
+                        <div class="stat"><div class="stat-val" id="statMacros">0</div><div class="stat-label">Macros</div></div>
+                    </div>
+                    <div class="stats" style="margin-top:6px;">
+                        <div class="stat"><div class="stat-val" id="statPaths">0</div><div class="stat-label">Paths</div></div>
+                        <div class="stat"><div class="stat-val" id="statDepth">0</div><div class="stat-label">Max Depth</div></div>
+                        <div class="stat"><div class="stat-val" id="statPtrs">0</div><div class="stat-label">Func Ptrs</div></div>
+                        <div class="stat"><div class="stat-val" id="statTime">0</div><div class="stat-label">ms</div></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Results Panel -->
+            <div class="results">
+                <div class="card" style="height:100%;">
+                    <div class="tabs">
+                        <button class="tab active" data-tab="tree">📊 Call Tree</button>
+                        <button class="tab" data-tab="paths">🔀 All Paths</button>
+                        <button class="tab" data-tab="deps">📁 Dependencies</button>
+                        <button class="tab" data-tab="registry">📋 Registry</button>
+                        <button class="tab" data-tab="funcs">⚡ Functions</button>
+                        <button class="tab" data-tab="log">📝 Log</button>
+                    </div>
+                    
+                    <div class="legend">
+                        <div class="legend-item"><div class="legend-color" style="background:var(--cyan)"></div>Entry</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Target</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>Intermediate</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--pink)"></div>Macro</div>
+                        <div class="legend-item"><div class="legend-color" style="background:#79c0ff"></div>Func Pointer</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Registry</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>External</div>
+                    </div>
+                    
+                    <div class="output" id="output">
+                        <div style="color:var(--text-muted);text-align:center;padding:60px 20px;">
+                            <div style="font-size:2rem;margin-bottom:10px;">📂</div>
+                            <div>Upload C project files and click <strong>Analyze</strong> to trace call paths</div>
+                            <div style="margin-top:15px;font-size:0.8rem;">
+                                Supports: Makefile parsing, recursive header resolution, function registry
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// PHASE 1: DEPENDENCY RESOLVER
+// ============================================================
+class DependencyResolver {
+    constructor() {
+        this.files = new Map();              // filename -> content
+        this.headerPaths = new Map();        // header name -> resolved path
+        this.fileDependencies = new Map();   // file -> Set of includes
+        this.srcsFromMakefile = [];          // SRCS from Makefile
+        this.includePaths = [];              // Search paths
+        this.log = [];
+    }
+
+    addLog(type, msg) {
+        this.log.push({ type, msg });
+    }
+
+    setIncludePaths(paths) {
+        this.includePaths = paths.filter(p => p.trim());
+    }
+
+    // Parse Makefile to extract SRCS
+    parseMakefile(content, filename) {
+        this.addLog('makefile', `Parsing ${filename} for SRCS...`);
+        
+        // Normalize line continuations
+        const normalized = content.replace(/\\\s*\n/g, ' ');
+        
+        const patterns = [
+            /SRCS?\s*[:+]?=\s*([^\n]+)/gi,
+            /SOURCES?\s*[:+]?=\s*([^\n]+)/gi,
+            /C_SRCS?\s*[:+]?=\s*([^\n]+)/gi,
+            /SOURCE_FILES?\s*[:+]?=\s*([^\n]+)/gi,
+            /OBJS?\s*[:+]?=\s*([^\n]+)/gi,
+        ];
+
+        const sources = new Set();
+        
+        for (const pattern of patterns) {
+            let match;
+            while ((match = pattern.exec(normalized)) !== null) {
+                // Extract .c files
+                const fileMatches = match[1].match(/[\w\/\.\-]+\.c\b/gi);
+                if (fileMatches) {
+                    fileMatches.forEach(f => sources.add(f.trim()));
+                }
+                // Handle .o -> .c conversion
+                const objMatches = match[1].match(/[\w\/\.\-]+\.o\b/gi);
+                if (objMatches) {
+                    objMatches.forEach(f => sources.add(f.replace(/\.o$/, '.c').trim()));
+                }
+            }
+        }
+
+        // Extract include paths from CFLAGS
+        const cflagsMatch = normalized.match(/CFLAGS\s*[:+]?=\s*([^\n]+)/i);
+        if (cflagsMatch) {
+            const incMatches = cflagsMatch[1].match(/-I\s*(\S+)/g);
+            if (incMatches) {
+                incMatches.forEach(inc => {
+                    const path = inc.replace(/^-I\s*/, '').trim();
+                    if (path && !this.includePaths.includes(path)) {
+                        this.includePaths.push(path);
+                        this.addLog('makefile', `Found include path: ${path}`);
+                    }
+                });
+            }
+        }
+
+        this.srcsFromMakefile = [...sources];
+        this.addLog('success', `Extracted ${this.srcsFromMakefile.length} source files from Makefile`);
+        
+        return this.srcsFromMakefile;
+    }
+
+    // Extract #include directives
+    extractIncludes(content) {
+        const includes = [];
+        
+        // #include "header.h"
+        const localPattern = /#\s*include\s*"([^"]+)"/g;
+        let match;
+        while ((match = localPattern.exec(content)) !== null) {
+            includes.push({ name: match[1], isLocal: true });
+        }
+        
+        // #include <header.h>
+        const systemPattern = /#\s*include\s*<([^>]+)>/g;
+        while ((match = systemPattern.exec(content)) !== null) {
+            includes.push({ name: match[1], isLocal: false });
+        }
+
+        return includes;
+    }
+
+    // Resolve header path
+    resolveHeaderPath(headerName, fromFile = null) {
+        // Already resolved?
+        if (this.headerPaths.has(headerName)) {
+            return this.headerPaths.get(headerName);
+        }
+
+        // Direct match in uploaded files
+        for (const [filename] of this.files) {
+            const baseName = filename.split('/').pop();
+            if (baseName === headerName || filename === headerName || filename.endsWith('/' + headerName)) {
+                this.headerPaths.set(headerName, filename);
+                return filename;
+            }
+        }
+
+        // Check include paths
+        for (const incPath of this.includePaths) {
+            for (const [filename] of this.files) {
+                if (filename === `${incPath}/${headerName}` || filename.endsWith(`${incPath}/${headerName}`)) {
+                    this.headerPaths.set(headerName, filename);
+                    return filename;
+                }
+            }
+        }
+
+        // Partial match
+        for (const [filename] of this.files) {
+            if (filename.includes(headerName)) {
+                this.headerPaths.set(headerName, filename);
+                return filename;
+            }
+        }
+
+        return null;
+    }
+
+    // Recursively resolve all dependencies
+    resolveAllDependencies() {
+        this.addLog('dep', 'Starting recursive dependency resolution...');
+        
+        const processed = new Set();
+        const queue = [];
+
+        // Start with all source files
+        for (const [filename] of this.files) {
+            if (filename.match(/\.(c|cpp|cc)$/i)) {
+                queue.push(filename);
+            }
+        }
+
+        let iterations = 0;
+        const maxIterations = 1000; // Safety limit
+
+        while (queue.length > 0 && iterations < maxIterations) {
+            iterations++;
+            const currentFile = queue.shift();
+            
+            if (processed.has(currentFile)) continue;
+            processed.add(currentFile);
+
+            const content = this.files.get(currentFile);
+            if (!content) continue;
+
+            const includes = this.extractIncludes(content);
+            const deps = new Set();
+
+            for (const inc of includes) {
+                const resolvedPath = this.resolveHeaderPath(inc.name, currentFile);
+                
+                if (resolvedPath) {
+                    deps.add(resolvedPath);
+                    
+                    // Add to queue for recursive processing
+                    if (!processed.has(resolvedPath) && !queue.includes(resolvedPath)) {
+                        queue.push(resolvedPath);
+                    }
+                } else if (inc.isLocal) {
+                    deps.add(`[UNRESOLVED] ${inc.name}`);
+                }
+            }
+
+            if (deps.size > 0) {
+                this.fileDependencies.set(currentFile, deps);
+            }
+        }
+
+        this.addLog('success', `Resolved dependencies for ${processed.size} files, ${this.headerPaths.size} headers mapped`);
+    }
+
+    // Get header-to-path dictionary
+    getHeaderPathDictionary() {
+        return Object.fromEntries(this.headerPaths);
+    }
+}
+
+// ============================================================
+// PHASE 2: FUNCTION REGISTRY
+// ============================================================
+class FunctionRegistry {
+    constructor() {
+        this.functions = new Map();  // function_name -> info
+        this.log = [];
+    }
+
+    addLog(type, msg) {
+        this.log.push({ type, msg });
+    }
+
+    // Load from JSON
+    loadFromJSON(jsonContent, filename) {
+        try {
+            const data = JSON.parse(jsonContent);
+            let count = 0;
+            
+            if (Array.isArray(data)) {
+                for (const func of data) {
+                    const name = func.name || func.function_name || func.func_name;
+                    if (name) {
+                        this.functions.set(name, this.normalize(func));
+                        count++;
+                    }
+                }
+            } else if (typeof data === 'object') {
+                for (const [name, info] of Object.entries(data)) {
+                    if (typeof info === 'object') {
+                        this.functions.set(name, this.normalize({ name, ...info }));
+                        count++;
+                    }
+                }
+            }
+
+            this.addLog('registry', `Loaded ${count} functions from ${filename}`);
+        } catch (e) {
+            this.addLog('error', `Failed to parse ${filename}: ${e.message}`);
+        }
+    }
+
+    normalize(func) {
+        return {
+            name: func.name || func.function_name || 'unknown',
+            prototype: func.prototype || func.signature || func.declaration || '',
+            returnType: func.returnType || func.return_type || func.returns || 'void',
+            arguments: this.normalizeArgs(func.arguments || func.args || func.parameters || []),
+            callbacks: func.callbacks || func.callback_refs || func.callback_functions || [],
+            description: func.description || func.desc || '',
+            file: func.file || func.source || '',
+        };
+    }
+
+    normalizeArgs(args) {
+        if (!Array.isArray(args)) return [];
+        return args.map(arg => {
+            if (typeof arg === 'string') return { name: arg, type: 'unknown' };
+            return {
+                name: arg.name || arg.arg_name || '',
+                type: arg.type || arg.arg_type || 'unknown',
+                description: arg.description || ''
+            };
+        });
+    }
+
+    has(name) { return this.functions.has(name); }
+    get(name) { return this.functions.get(name); }
+    getCallbacks(name) {
+        const func = this.functions.get(name);
+        return func ? func.callbacks : [];
+    }
+}
+
+// ============================================================
+// PHASE 3 & 4: CODE ANALYZER
+// ============================================================
+class CodeAnalyzer {
+    constructor(depResolver, registry, options = {}) {
+        this.depResolver = depResolver;
+        this.registry = registry;
+        this.options = options;
+        
+        this.functions = new Map();
+        this.macros = new Map();
+        this.funcPointers = new Map();
+        this.callGraph = new Map();
+        this.log = [];
+        
+        this.stats = {
+            files: 0,
+            functions: 0,
+            headers: 0,
+            macros: 0,
+            pointers: 0,
+            paths: 0,
+            maxDepth: 0
+        };
+    }
+
+    addLog(type, msg) {
+        this.log.push({ type, msg });
+    }
+
+    // Remove comments
+    removeComments(code) {
+        // Multi-line comments
+        code = code.replace(/\/\*[\s\S]*?\*\//g, ' ');
+        // Single-line comments
+        code = code.replace(/\/\/.*$/gm, '');
+        return code;
+    }
+
+    // Remove string literals
+    removeStrings(code) {
+        code = code.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+        code = code.replace(/'(?:[^'\\]|\\.)*'/g, "''");
+        return code;
+    }
+
+    // Check if valid function name
+    isValidFunc(name) {
+        const keywords = new Set([
+            'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'break',
+            'continue', 'return', 'goto', 'sizeof', 'typeof', 'NULL', 'null',
+            'true', 'false', 'void', 'int', 'char', 'float', 'double', 'long',
+            'short', 'unsigned', 'signed', 'const', 'static', 'extern',
+            'struct', 'enum', 'union', 'typedef', 'register', 'volatile',
+            'inline', 'restrict', 'auto', 'default', '_Bool', '_Complex'
+        ]);
+        if (keywords.has(name)) return false;
+        if (/^\d/.test(name)) return false;
+        if (name.length < 2) return false;
+        if (name.startsWith('__')) return false;
+        return true;
+    }
+
+    // Extract function calls from code
+    findCalls(code) {
+        const calls = [];
+        const regex = /\b([a-zA-Z_]\w*)\s*\(/g;
+        let match;
+        while ((match = regex.exec(code)) !== null) {
+            if (this.isValidFunc(match[1])) {
+                calls.push(match[1]);
+            }
+        }
+        return [...new Set(calls)];
+    }
+
+    // Parse macros from code
+    parseMacros(code, filename) {
+        if (!this.options.expandMacros) return;
+
+        // Handle line continuations first
+        const normalized = code.replace(/\\\s*\n/g, ' ');
+        
+        // Function-like macros: #define NAME(args) body
+        const funcMacroRegex = /#\s*define\s+(\w+)\s*\(([^)]*)\)\s+(.+?)(?=\n|$)/g;
+        let match;
+        
+        while ((match = funcMacroRegex.exec(normalized)) !== null) {
+            const name = match[1];
+            const params = match[2];
+            const body = match[3].trim();
+            const calls = this.findCalls(body);
+            
+            this.macros.set(name, {
+                name, params, body, calls, file: filename, isFunctionLike: true
+            });
+            
+            if (calls.length > 0) {
+                this.addLog('macro', `${name}(${params}) → ${calls.join(', ')}`);
+            }
+        }
+
+        // Object-like macros: #define NAME value
+        const objMacroRegex = /#\s*define\s+(\w+)\s+([^(\n][^\n]*)/g;
+        while ((match = objMacroRegex.exec(normalized)) !== null) {
+            const name = match[1];
+            if (!this.macros.has(name)) {
+                const body = match[2].trim();
+                const calls = this.findCalls(body);
+                if (calls.length > 0 || this.isValidFunc(body)) {
+                    this.macros.set(name, {
+                        name, body, calls, file: filename, isFunctionLike: false
+                    });
+                }
+            }
+        }
+    }
+
+    // Parse function pointer assignments
+    parseFuncPointers(code, filename) {
+        if (!this.options.trackPointers) return;
+
+        const patterns = [
+            // .callback = func
+            /\.(\w+)\s*=\s*&?(\w+)\s*[,;}\)]/g,
+            // callback = func;
+            /(\w+)\s*=\s*&?(\w+)\s*;/g,
+            // Type (*name)(args) = func
+            /\w+\s*\(\s*\*\s*(\w+)\s*\)\s*\([^)]*\)\s*=\s*&?(\w+)/g,
+            // handlers[i] = func
+            /(\w+)\s*\[[^\]]*\]\s*=\s*&?(\w+)\s*[,;]/g,
+        ];
+
+        for (const pattern of patterns) {
+            let match;
+            while ((match = pattern.exec(code)) !== null) {
+                const varName = match[1];
+                const funcName = match[2];
+                
+                if (this.isValidFunc(funcName) && varName !== funcName) {
+                    if (!this.funcPointers.has(varName)) {
+                        this.funcPointers.set(varName, new Set());
+                    }
+                    this.funcPointers.get(varName).add(funcName);
+                }
+            }
+        }
+    }
+
+    // Find matching brace with safety limit
+    findMatchingBrace(code, start) {
+        let depth = 1;
+        let i = start;
+        const limit = Math.min(code.length, start + 100000);
+        
+        while (i < limit && depth > 0) {
+            if (code[i] === '{') depth++;
+            else if (code[i] === '}') depth--;
+            i++;
+        }
+        
+        return depth === 0 ? i : -1;
+    }
+
+    // Parse function definitions
+    parseFunctions(code, filename) {
+        const cleanCode = this.removeStrings(this.removeComments(code));
+        
+        // Match function definitions
+        const funcRegex = /\b([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*\{/g;
+        let match;
+        let count = 0;
+        
+        while ((match = funcRegex.exec(cleanCode)) !== null) {
+            const name = match[1];
+            
+            if (!this.isValidFunc(name)) continue;
+            if (this.functions.has(name)) continue; // Skip duplicates
+            
+            const bodyStart = match.index + match[0].length;
+            const bodyEnd = this.findMatchingBrace(cleanCode, bodyStart);
+            
+            if (bodyEnd === -1) continue;
+            
+            const body = cleanCode.substring(bodyStart - 1, bodyEnd);
+            const directCalls = this.findCalls(body);
+            
+            // Build call details with type info
+            const callDetails = new Map();
+            
+            for (const call of directCalls) {
+                if (call === name) continue; // Skip self-recursion for now
+                
+                // Check if it's a macro invocation
+                if (this.macros.has(call)) {
+                    const macro = this.macros.get(call);
+                    callDetails.set(call, { type: 'macro-invoke' });
+                    // Add macro expansion calls
+                    for (const mc of macro.calls) {
+                        if (mc !== name) {
+                            callDetails.set(mc, { type: 'macro', via: call });
+                        }
+                    }
+                }
+                // Check if it's a function pointer
+                else if (this.funcPointers.has(call)) {
+                    for (const target of this.funcPointers.get(call)) {
+                        if (target !== name) {
+                            callDetails.set(target, { type: 'pointer', via: call });
+                        }
+                    }
+                }
+                // Check if it's in registry
+                else if (this.registry.has(call)) {
+                    callDetails.set(call, { type: 'registry' });
+                    // Add registry callbacks
+                    const callbacks = this.registry.getCallbacks(call);
+                    for (const cb of callbacks) {
+                        if (cb !== name) {
+                            callDetails.set(cb, { type: 'callback', via: call });
+                        }
+                    }
+                }
+                // Direct call
+                else {
+                    callDetails.set(call, { type: 'direct' });
+                }
+            }
+
+            // Check for callback patterns in body
+            const cbPatterns = [
+                /(\w+)->(\w+)\s*\(/g,  // obj->callback()
+                /(\w+)\.(\w+)\s*\(/g,   // obj.callback()
+            ];
+            
+            for (const pattern of cbPatterns) {
+                let cbMatch;
+                while ((cbMatch = pattern.exec(body)) !== null) {
+                    const member = cbMatch[2];
+                    if (this.funcPointers.has(member)) {
+                        for (const target of this.funcPointers.get(member)) {
+                            if (target !== name) {
+                                callDetails.set(target, { type: 'callback', via: member });
+                            }
+                        }
+                    }
+                }
+            }
+
+            this.functions.set(name, {
+                name,
+                file: filename,
+                calls: callDetails,
+                isRegistry: this.registry.has(name)
+            });
+            
+            count++;
+        }
+
+        if (count > 0) {
+            this.addLog('parse', `${filename}: ${count} functions`);
+        }
+    }
+
+    // Parse a single file
+    parseFile(filename, content) {
+        this.stats.files++;
+        
+        const ext = filename.split('.').pop().toLowerCase();
+        const isHeader = ['h', 'hpp', 'hh'].includes(ext);
+        
+        if (isHeader) this.stats.headers++;
+        
+        // Parse in order: macros, pointers, functions
+        this.parseMacros(content, filename);
+        this.parseFuncPointers(content, filename);
+        this.parseFunctions(content, filename);
+    }
+
+    // Build call graph
+    buildCallGraph() {
+        for (const [name, func] of this.functions) {
+            this.callGraph.set(name, func.calls);
+        }
+        
+        // Add macros that expand to function calls
+        for (const [name, macro] of this.macros) {
+            if (macro.calls.length > 0 && !this.callGraph.has(name)) {
+                const calls = new Map();
+                for (const call of macro.calls) {
+                    calls.set(call, { type: 'macro-expansion' });
+                }
+                this.callGraph.set(name, calls);
+            }
+        }
+
+        this.stats.functions = this.functions.size;
+        this.stats.macros = this.macros.size;
+        this.stats.pointers = this.funcPointers.size;
+        
+        this.addLog('success', `Call graph: ${this.functions.size} functions, ${this.macros.size} macros, ${this.funcPointers.size} pointers`);
+    }
+
+    // Find all paths from entry to target
+    findPaths(entry, target, maxDepth = 30, maxPaths = 100, maxTimeMs = 5000) {
+        const paths = [];
+        const startTime = Date.now();
+        
+        if (!this.callGraph.has(entry)) {
+            this.addLog('error', `Entry function '${entry}' not found in call graph`);
+            
+            // Suggest similar functions
+            const similar = [...this.functions.keys()]
+                .filter(f => f.toLowerCase().includes(entry.toLowerCase()) || entry.toLowerCase().includes(f.toLowerCase()))
+                .slice(0, 5);
+            
+            if (similar.length > 0) {
+                this.addLog('info', `Similar functions: ${similar.join(', ')}`);
+            }
+            
+            return paths;
+        }
+
+        const dfs = (current, path, visited) => {
+            // Safety checks
+            if (Date.now() - startTime > maxTimeMs) return;
+            if (paths.length >= maxPaths) return;
+            if (path.length > maxDepth) return;
+            if (visited.has(current)) return;
+
+            // Found target
+            if (current === target) {
+                paths.push([...path]);
+                this.addLog('path', `Found path #${paths.length}: ${path.map(p => p.name).join(' → ')}`);
+                return;
+            }
+
+            visited.add(current);
+
+            const calls = this.callGraph.get(current);
+            if (calls) {
+                for (const [callee, info] of calls) {
+                    path.push({ name: callee, ...info });
+                    dfs(callee, path, visited);
+                    path.pop();
+                }
+            }
+
+            visited.delete(current);
+        };
+
+        this.addLog('info', `Searching paths from '${entry}' to '${target}'...`);
+        
+        dfs(entry, [{ name: entry, type: 'entry' }], new Set());
+        
+        const elapsed = Date.now() - startTime;
+        
+        this.stats.paths = paths.length;
+        if (paths.length > 0) {
+            this.stats.maxDepth = Math.max(...paths.map(p => p.length));
+        }
+        
+        if (paths.length === 0) {
+            this.addLog('warning', `No path found from '${entry}' to '${target}'`);
+            
+            // Check if target exists
+            if (!this.functions.has(target) && !this.macros.has(target)) {
+                this.addLog('error', `Target '${target}' not found in codebase`);
+                
+                const similar = [...this.functions.keys()]
+                    .filter(f => f.toLowerCase().includes(target.toLowerCase()) || target.toLowerCase().includes(f.toLowerCase()))
+                    .slice(0, 5);
+                
+                if (similar.length > 0) {
+                    this.addLog('info', `Similar functions: ${similar.join(', ')}`);
+                }
+            }
+        } else {
+            this.addLog('success', `Found ${paths.length} path(s) in ${elapsed}ms`);
+        }
+
+        return paths;
+    }
+}
+
+// ============================================================
+// UI CONTROLLER
+// ============================================================
+class UI {
+    constructor() {
+        this.projectFiles = new Map();
+        this.registryFiles = new Map();
+        
+        this.depResolver = null;
+        this.registry = null;
+        this.analyzer = null;
+        this.results = null;
+        
+        this.currentTab = 'tree';
+        this.init();
+    }
+
+    init() {
+        // Bind elements
+        this.projectZone = document.getElementById('projectZone');
+        this.projectInput = document.getElementById('projectInput');
+        this.projectList = document.getElementById('projectList');
+        this.projectCount = document.getElementById('projectCount');
+        
+        this.registryZone = document.getElementById('registryZone');
+        this.registryInput = document.getElementById('registryInput');
+        this.registryList = document.getElementById('registryList');
+        this.registryCount = document.getElementById('registryCount');
+        
+        this.analyzeBtn = document.getElementById('analyzeBtn');
+        this.clearBtn = document.getElementById('clearBtn');
+        this.exportBtn = document.getElementById('exportBtn');
+        
+        this.output = document.getElementById('output');
+        this.statsCard = document.getElementById('statsCard');
+        
+        this.phases = [
+            document.getElementById('phase1'),
+            document.getElementById('phase2'),
+            document.getElementById('phase3'),
+            document.getElementById('phase4')
+        ];
+
+        // Bind events
+        this.bindUpload(this.projectZone, this.projectInput, this.projectFiles, this.updateProjectList.bind(this));
+        this.bindUpload(this.registryZone, this.registryInput, this.registryFiles, this.updateRegistryList.bind(this));
+        
+        this.analyzeBtn.addEventListener('click', () => this.analyze());
+        this.clearBtn.addEventListener('click', () => this.clear());
+        this.exportBtn.addEventListener('click', () => this.exportResults());
+        
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => this.switchTab(tab.dataset.tab));
+        });
+    }
+
+    bindUpload(zone, input, filesMap, updateFn) {
+        zone.addEventListener('click', () => input.click());
+        
+        input.addEventListener('change', e => {
+            this.handleFiles(e.target.files, filesMap, updateFn);
+        });
+        
+        zone.addEventListener('dragover', e => {
+            e.preventDefault();
+            zone.style.borderColor = 'var(--cyan)';
+        });
+        
+        zone.addEventListener('dragleave', () => {
+            zone.style.borderColor = '';
+        });
+        
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.style.borderColor = '';
+            this.handleFiles(e.dataTransfer.files, filesMap, updateFn);
+        });
+    }
+
+    handleFiles(fileList, filesMap, updateFn) {
+        for (const file of fileList) {
+            const name = file.name;
+            const ext = name.split('.').pop().toLowerCase();
+            const baseName = name.toLowerCase();
+            
+            // Check valid extensions
+            const validProject = ['c', 'h', 'cpp', 'hpp', 'cc', 'hh', 'mk'].includes(ext) || 
+                               baseName === 'makefile';
+            const validRegistry = ext === 'json';
+            
+            if (filesMap === this.projectFiles && validProject) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    filesMap.set(name, e.target.result);
+                    updateFn();
+                };
+                reader.readAsText(file);
+            } else if (filesMap === this.registryFiles && validRegistry) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    filesMap.set(name, e.target.result);
+                    updateFn();
+                };
+                reader.readAsText(file);
+            }
+        }
+    }
+
+    updateProjectList() {
+        this.projectList.innerHTML = '';
+        this.projectCount.textContent = `${this.projectFiles.size} files`;
+        this.projectZone.classList.toggle('has-files', this.projectFiles.size > 0);
+        
+        for (const name of this.projectFiles.keys()) {
+            const ext = name.split('.').pop().toLowerCase();
+            const baseName = name.toLowerCase();
+            let type = 'c';
+            if (['h', 'hpp', 'hh'].includes(ext)) type = 'h';
+            else if (baseName === 'makefile' || ext === 'mk') type = 'mk';
+            
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            item.innerHTML = `
+                <span><span class="type ${type}">${type.toUpperCase()}</span>${name}</span>
+                <button class="remove" data-file="${name}" data-type="project">×</button>
+            `;
+            this.projectList.appendChild(item);
+        }
+        
+        this.bindRemoveButtons();
+        this.analyzeBtn.disabled = this.projectFiles.size === 0;
+    }
+
+    updateRegistryList() {
+        this.registryList.innerHTML = '';
+        this.registryCount.textContent = `${this.registryFiles.size} files`;
+        this.registryZone.classList.toggle('has-files', this.registryFiles.size > 0);
+        
+        for (const name of this.registryFiles.keys()) {
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            item.innerHTML = `
+                <span><span class="type json">JSON</span>${name}</span>
+                <button class="remove" data-file="${name}" data-type="registry">×</button>
+            `;
+            this.registryList.appendChild(item);
+        }
+        
+        this.bindRemoveButtons();
+    }
+
+    bindRemoveButtons() {
+        document.querySelectorAll('.remove').forEach(btn => {
+            btn.onclick = () => {
+                const file = btn.dataset.file;
+                const type = btn.dataset.type;
+                if (type === 'project') {
+                    this.projectFiles.delete(file);
+                    this.updateProjectList();
+                } else {
+                    this.registryFiles.delete(file);
+                    this.updateRegistryList();
+                }
+            };
+        });
+    }
+
+    setPhase(num, status = 'active') {
+        this.phases.forEach((p, i) => {
+            p.classList.remove('active', 'done');
+            if (i < num - 1) p.classList.add('done');
+            else if (i === num - 1) p.classList.add(status);
+        });
+    }
+
+    showProgress(phase, text, percent) {
+        this.output.innerHTML = `
+            <div class="progress">
+                <div class="progress-phase">Phase ${phase}: ${['Dependencies', 'Registry', 'Parse', 'Trace'][phase-1]}</div>
+                <div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div>
+                <p class="progress-text">${text}</p>
+            </div>
+        `;
+    }
+
+    async analyze() {
+        const entry = document.getElementById('entryFunc').value.trim();
+        const target = document.getElementById('targetFunc').value.trim();
+        const includePaths = document.getElementById('includePaths').value.split(',').map(p => p.trim()).filter(p => p);
+        
+        const options = {
+            parseMakefile: document.getElementById('optMakefile').checked,
+            recursiveHeaders: document.getElementById('optRecursive').checked,
+            expandMacros: document.getElementById('optMacros').checked,
+            trackPointers: document.getElementById('optPointers').checked,
+            useRegistry: document.getElementById('optRegistry').checked,
+            findAllPaths: document.getElementById('optAllPaths').checked,
+        };
+
+        if (!entry || !target) {
+            alert('Please enter entry and target function names');
+            return;
+        }
+
+        const startTime = Date.now();
+
+        try {
+            // ========== PHASE 1: Dependencies ==========
+            this.setPhase(1);
+            this.showProgress(1, 'Initializing dependency resolver...', 10);
+            await this.sleep(30);
+
+            this.depResolver = new DependencyResolver();
+            this.depResolver.setIncludePaths(includePaths);
+
+            // Add all files
+            for (const [name, content] of this.projectFiles) {
+                this.depResolver.files.set(name, content);
+            }
+
+            // Parse Makefile
+            if (options.parseMakefile) {
+                for (const [name, content] of this.projectFiles) {
+                    const baseName = name.toLowerCase();
+                    if (baseName === 'makefile' || name.endsWith('.mk')) {
+                        this.showProgress(1, `Parsing ${name}...`, 30);
+                        await this.sleep(20);
+                        this.depResolver.parseMakefile(content, name);
+                    }
+                }
+            }
+
+            // Resolve dependencies
+            if (options.recursiveHeaders) {
+                this.showProgress(1, 'Resolving header dependencies...', 50);
+                await this.sleep(30);
+                this.depResolver.resolveAllDependencies();
+            }
+
+            this.setPhase(1, 'done');
+            this.showProgress(1, 'Dependencies resolved', 100);
+            await this.sleep(50);
+
+            // ========== PHASE 2: Registry ==========
+            this.setPhase(2);
+            this.showProgress(2, 'Loading function registry...', 20);
+            await this.sleep(30);
+
+            this.registry = new FunctionRegistry();
+
+            if (options.useRegistry && this.registryFiles.size > 0) {
+                for (const [name, content] of this.registryFiles) {
+                    this.showProgress(2, `Loading ${name}...`, 50);
+                    await this.sleep(20);
+                    this.registry.loadFromJSON(content, name);
+                }
+            }
+
+            this.setPhase(2, 'done');
+            this.showProgress(2, `Registry loaded: ${this.registry.functions.size} functions`, 100);
+            await this.sleep(50);
+
+            // ========== PHASE 3: Parse ==========
+            this.setPhase(3);
+            this.analyzer = new CodeAnalyzer(this.depResolver, this.registry, options);
+
+            // Parse headers first
+            let fileCount = 0;
+            const totalFiles = this.projectFiles.size;
+
+            for (const [name, content] of this.projectFiles) {
+                const ext = name.split('.').pop().toLowerCase();
+                if (['h', 'hpp', 'hh'].includes(ext)) {
+                    fileCount++;
+                    const percent = Math.round((fileCount / totalFiles) * 100);
+                    this.showProgress(3, `Parsing header: ${name}`, percent);
+                    await this.sleep(10);
+                    this.analyzer.parseFile(name, content);
+                }
+            }
+
+            // Parse source files
+            for (const [name, content] of this.projectFiles) {
+                const ext = name.split('.').pop().toLowerCase();
+                if (['c', 'cpp', 'cc'].includes(ext)) {
+                    fileCount++;
+                    const percent = Math.round((fileCount / totalFiles) * 100);
+                    this.showProgress(3, `Parsing source: ${name}`, percent);
+                    await this.sleep(10);
+                    this.analyzer.parseFile(name, content);
+                }
+            }
+
+            this.showProgress(3, 'Building call graph...', 90);
+            await this.sleep(30);
+            this.analyzer.buildCallGraph();
+
+            this.setPhase(3, 'done');
+            this.showProgress(3, 'Parsing complete', 100);
+            await this.sleep(50);
+
+            // ========== PHASE 4: Trace ==========
+            this.setPhase(4);
+            this.showProgress(4, `Tracing paths: ${entry} → ${target}`, 30);
+            await this.sleep(30);
+
+            const maxDepth = 30;
+            const maxPaths = options.findAllPaths ? 100 : 10;
+            const paths = this.analyzer.findPaths(entry, target, maxDepth, maxPaths, 5000);
+
+            this.setPhase(4, 'done');
+
+            const elapsed = Date.now() - startTime;
+
+            // Store results
+            this.results = { entry, target, paths, elapsed };
+
+            // Update stats
+            document.getElementById('statFiles').textContent = this.analyzer.stats.files;
+            document.getElementById('statFuncs').textContent = this.analyzer.stats.functions;
+            document.getElementById('statHeaders').textContent = this.analyzer.stats.headers;
+            document.getElementById('statMacros').textContent = this.analyzer.stats.macros;
+            document.getElementById('statPaths').textContent = this.analyzer.stats.paths;
+            document.getElementById('statDepth').textContent = this.analyzer.stats.maxDepth;
+            document.getElementById('statPtrs').textContent = this.analyzer.stats.pointers;
+            document.getElementById('statTime').textContent = elapsed;
+            this.statsCard.style.display = 'block';
+
+            // Render results
+            this.switchTab(this.currentTab);
+
+        } catch (error) {
+            console.error(error);
+            this.output.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
+        }
+    }
+
+    sleep(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    switchTab(tab) {
+        this.currentTab = tab;
+        
+        document.querySelectorAll('.tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === tab);
+        });
+
+        if (!this.analyzer && !this.results) return;
+
+        switch (tab) {
+            case 'tree': this.renderTree(); break;
+            case 'paths': this.renderPaths(); break;
+            case 'deps': this.renderDeps(); break;
+            case 'registry': this.renderRegistry(); break;
+            case 'funcs': this.renderFuncs(); break;
+            case 'log': this.renderLog(); break;
+        }
+    }
+
+    renderTree() {
+        if (!this.results || this.results.paths.length === 0) {
+            let html = `<div style="color:var(--text-muted);text-align:center;padding:40px;">`;
+            html += `<div style="font-size:1.5rem;margin-bottom:10px;">⚠️</div>`;
+            html += `<div>No paths found from <strong>${this.results?.entry || 'entry'}</strong> to <strong>${this.results?.target || 'target'}</strong></div>`;
+            html += `<div style="margin-top:10px;font-size:0.8rem;">Check the Log tab for details</div>`;
+            html += `</div>`;
+            this.output.innerHTML = html;
+            return;
+        }
+
+        // Build tree from all paths
+        const root = { 
+            name: this.results.entry, 
+            type: 'entry', 
+            file: this.analyzer.functions.get(this.results.entry)?.file || '',
+            children: new Map() 
+        };
+        
+        for (const path of this.results.paths) {
+            let node = root;
+            for (let i = 1; i < path.length; i++) {
+                const step = path[i];
+                if (!node.children.has(step.name)) {
+                    const func = this.analyzer.functions.get(step.name);
+                    node.children.set(step.name, {
+                        name: step.name,
+                        type: step.name === this.results.target ? 'target' : step.type,
+                        via: step.via,
+                        file: func?.file || '',
+                        children: new Map()
+                    });
+                }
+                node = node.children.get(step.name);
+            }
+        }
+
+        // Render tree
+        let html = '';
+        const render = (node, prefix = '', isLast = true) => {
+            const conn = isLast ? '└── ' : '├── ';
+            
+            let cls = 'c-inter';
+            if (node.type === 'entry') cls = 'c-entry';
+            else if (node.type === 'target') cls = 'c-target';
+            else if (node.type === 'macro' || node.type === 'macro-invoke') cls = 'c-macro';
+            else if (node.type === 'pointer' || node.type === 'callback') cls = 'c-ptr';
+            else if (node.type === 'registry') cls = 'c-reg';
+            else if (!this.analyzer.functions.has(node.name)) cls = 'c-ext';
+
+            const marker = node.type === 'target' ? ' <span class="c-target">★</span>' : '';
+            const via = node.via ? ` <span class="c-muted">[via ${node.via}]</span>` : '';
+            const file = node.file ? ` <span class="c-file">[${node.file}]</span>` : '';
+
+            html += `${prefix}${conn}<span class="${cls}">${node.name}</span>${marker}${via}${file}\n`;
+
+            const children = [...node.children.values()];
+            const newPrefix = prefix + (isLast ? '    ' : '│   ');
+            children.forEach((child, i) => render(child, newPrefix, i === children.length - 1));
+        };
+
+        render(root);
+        this.output.innerHTML = html;
+    }
+
+    renderPaths() {
+        if (!this.results || this.results.paths.length === 0) {
+            this.output.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:40px;">No paths found</div>`;
+            return;
+        }
+
+        let html = '';
+        this.results.paths.forEach((path, i) => {
+            html += `<div class="path-item">
+                <div class="path-header">
+                    <span class="path-num">Path ${i + 1}</span>
+                    <span style="color:var(--text-muted);font-size:0.75rem;">Depth: ${path.length}</span>
+                </div>
+                <div class="path-chain">`;
+            
+            path.forEach((step, j) => {
+                let cls = '';
+                if (j === path.length - 1) cls = 'target';
+                else if (step.type === 'macro' || step.type === 'macro-invoke') cls = 'macro';
+                else if (step.type === 'pointer' || step.type === 'callback') cls = 'ptr';
+                else if (step.type === 'registry') cls = 'reg';
+                
+                html += `<span class="func ${cls}">${step.name}</span>`;
+                if (j < path.length - 1) html += '<span class="arrow">→</span>';
+            });
+            
+            html += '</div></div>';
+        });
+
+        this.output.innerHTML = html;
+    }
+
+    renderDeps() {
+        if (!this.depResolver || this.depResolver.fileDependencies.size === 0) {
+            this.output.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:40px;">No dependencies resolved</div>`;
+            return;
+        }
+
+        let html = `<strong>Header-to-Path Dictionary (${this.depResolver.headerPaths.size} entries)</strong>\n\n`;
+        
+        for (const [header, path] of this.depResolver.headerPaths) {
+            html += `<span class="c-purple">${header}</span> → <span class="c-file">${path}</span>\n`;
+        }
+
+        html += `\n<strong>File Dependencies</strong>\n\n`;
+        
+        for (const [file, deps] of this.depResolver.fileDependencies) {
+            html += `<div class="dep-file">`;
+            html += `<div class="dep-header">📄 ${file}</div>`;
+            html += `<div class="dep-includes">`;
+            for (const dep of deps) {
+                const unresolved = dep.startsWith('[UNRESOLVED]');
+                html += `<div class="dep-inc ${unresolved ? 'unresolved' : 'resolved'}">→ ${dep}</div>`;
+            }
+            html += `</div></div>`;
+        }
+
+        this.output.innerHTML = html;
+    }
+
+    renderRegistry() {
+        if (!this.registry || this.registry.functions.size === 0) {
+            this.output.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:40px;">No registry loaded</div>`;
+            return;
+        }
+
+        let html = '';
+        for (const [name, func] of this.registry.functions) {
+            html += `<div class="reg-item">
+                <div class="reg-header">
+                    <span class="reg-name">${name}</span>
+                    <span class="reg-badge">Registry</span>
+                </div>
+                <div class="reg-proto">${func.prototype || 'No prototype'}</div>
+                <div class="reg-meta">
+                    <div><strong>Return:</strong> ${func.returnType}</div>
+                    <div><strong>Args:</strong> ${func.arguments.length}</div>
+                    <div><strong>Callbacks:</strong> ${func.callbacks.join(', ') || 'None'}</div>
+                    <div><strong>File:</strong> ${func.file || 'N/A'}</div>
+                </div>
+            </div>`;
+        }
+
+        this.output.innerHTML = html;
+    }
+
+    renderFuncs() {
+        if (!this.analyzer) return;
+
+        let html = `<strong>Functions Found (${this.analyzer.functions.size})</strong>\n\n`;
+        
+        for (const [name, func] of this.analyzer.functions) {
+            const callCount = func.calls.size;
+            const regBadge = func.isRegistry ? ' <span class="c-reg">[REG]</span>' : '';
+            html += `<span class="c-inter">${name}</span>${regBadge} <span class="c-file">[${func.file}]</span> → ${callCount} calls\n`;
+        }
+
+        if (this.analyzer.macros.size > 0) {
+            html += `\n<strong>Macros with Function Calls (${this.analyzer.macros.size})</strong>\n\n`;
+            for (const [name, macro] of this.analyzer.macros) {
+                if (macro.calls.length > 0) {
+                    html += `<span class="c-macro">${name}</span> → ${macro.calls.join(', ')} <span class="c-file">[${macro.file}]</span>\n`;
+                }
+            }
+        }
+
+        if (this.analyzer.funcPointers.size > 0) {
+            html += `\n<strong>Function Pointer Assignments (${this.analyzer.funcPointers.size})</strong>\n\n`;
+            for (const [name, targets] of this.analyzer.funcPointers) {
+                html += `<span class="c-ptr">${name}</span> → ${[...targets].join(', ')}\n`;
+            }
+        }
+
+        this.output.innerHTML = html;
+    }
+
+    renderLog() {
+        let html = '';
+        
+        const allLogs = [
+            ...(this.depResolver?.log || []),
+            ...(this.registry?.log || []),
+            ...(this.analyzer?.log || [])
+        ];
+
+        if (allLogs.length === 0) {
+            this.output.innerHTML = `<div style="color:var(--text-muted);">No log entries</div>`;
+            return;
+        }
+
+        for (const entry of allLogs) {
+            let color = 'var(--text)';
+            if (entry.type === 'error') color = 'var(--red)';
+            else if (entry.type === 'warning') color = 'var(--orange)';
+            else if (entry.type === 'success') color = 'var(--green)';
+            else if (entry.type === 'macro') color = 'var(--pink)';
+            else if (entry.type === 'registry') color = 'var(--yellow)';
+            else if (entry.type === 'dep' || entry.type === 'makefile') color = 'var(--cyan)';
+            else if (entry.type === 'path') color = 'var(--purple)';
+            
+            html += `<span style="color:${color}">[${entry.type.toUpperCase()}]</span> ${entry.msg}\n`;
+        }
+
+        this.output.innerHTML = html;
+    }
+
+    exportResults() {
+        if (!this.results || !this.analyzer) {
+            alert('No results to export. Run analysis first.');
+            return;
+        }
+
+        const data = {
+            entry: this.results.entry,
+            target: this.results.target,
+            paths: this.results.paths,
+            stats: this.analyzer.stats,
+            headerDictionary: this.depResolver?.getHeaderPathDictionary() || {},
+            functions: [...this.analyzer.functions.keys()],
+            macros: [...this.analyzer.macros.keys()],
+            funcPointers: Object.fromEntries(
+                [...this.analyzer.funcPointers].map(([k, v]) => [k, [...v]])
+            )
+        };
+
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `call-trace-${this.results.entry}-to-${this.results.target}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    clear() {
+        this.projectFiles.clear();
+        this.registryFiles.clear();
+        this.depResolver = null;
+        this.registry = null;
+        this.analyzer = null;
+        this.results = null;
+        
+        this.updateProjectList();
+        this.updateRegistryList();
+        
+        this.statsCard.style.display = 'none';
+        this.phases.forEach(p => p.classList.remove('active', 'done'));
+        
+        this.output.innerHTML = `
+            <div style="color:var(--text-muted);text-align:center;padding:60px 20px;">
+                <div style="font-size:2rem;margin-bottom:10px;">📂</div>
+                <div>Upload C project files and click <strong>Analyze</strong> to trace call paths</div>
+            </div>
+        `;
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => new UI());
+</script>
+</body>
+</html>
