@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C Call Tracer + Argument Flow (Fixed)</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --cyan: #58a6ff;
+            --green: #3fb950;
+            --purple: #a371f7;
+            --pink: #f778ba;
+            --orange: #d29922;
+            --red: #f85149;
+            --yellow: #e3b341;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg-primary); color: var(--text); min-height: 100vh; }
+        .container { max-width: 1700px; margin: 0 auto; padding: 20px; }
+        header { text-align: center; padding: 15px 0; border-bottom: 1px solid var(--border); margin-bottom: 15px; }
+        h1 { color: var(--cyan); font-size: 1.7rem; margin-bottom: 5px; }
+        .subtitle { color: var(--text-muted); font-size: 0.85rem; }
+        
+        .main-grid { display: grid; grid-template-columns: 400px 1fr; gap: 20px; }
+        @media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
+        
+        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+        .card-title { color: var(--cyan); font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        
+        .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .upload-zone:hover { border-color: var(--cyan); background: rgba(88, 166, 255, 0.05); }
+        .upload-zone.has-files { border-color: var(--green); border-style: solid; }
+        .upload-zone p { color: var(--text-muted); margin-bottom: 8px; font-size: 0.85rem; }
+        .upload-zone .badge { display: inline-block; background: var(--bg-tertiary); color: var(--cyan); padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; margin: 2px; font-family: monospace; }
+        
+        .file-list { max-height: 130px; overflow-y: auto; margin-top: 10px; }
+        .file-item { display: flex; justify-content: space-between; align-items: center; background: var(--bg-tertiary); padding: 5px 10px; border-radius: 4px; margin-bottom: 4px; font-size: 0.75rem; font-family: monospace; }
+        .file-item .type { padding: 2px 6px; border-radius: 3px; font-size: 0.65rem; margin-right: 8px; }
+        .file-item .type.c { background: rgba(63, 185, 80, 0.2); color: var(--green); }
+        .file-item .type.h { background: rgba(163, 113, 247, 0.2); color: var(--purple); }
+        .file-item .remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; }
+        .file-item .remove:hover { color: var(--red); }
+        
+        .form-group { margin-bottom: 10px; }
+        .form-group label { display: block; color: var(--text-muted); font-size: 0.75rem; margin-bottom: 4px; }
+        .form-group input, .form-group select { width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; color: var(--text); font-family: monospace; font-size: 0.85rem; }
+        .form-group input:focus { outline: none; border-color: var(--cyan); }
+        
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 80px 100px; gap: 8px; }
+        
+        .btn { width: 100%; padding: 11px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+        .btn-primary { background: linear-gradient(135deg, var(--cyan), var(--purple)); color: #fff; }
+        .btn-primary:hover:not(:disabled) { opacity: 0.9; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text); border: 1px solid var(--border); margin-top: 8px; }
+        .btn-arg { background: linear-gradient(135deg, var(--yellow), var(--orange)); color: #000; margin-top: 8px; }
+        
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+        .stat { background: var(--bg-tertiary); padding: 8px; border-radius: 4px; text-align: center; }
+        .stat-val { font-size: 1.2rem; font-weight: 700; color: var(--cyan); }
+        .stat-label { font-size: 0.65rem; color: var(--text-muted); }
+        
+        .tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+        .tab { padding: 7px 14px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; }
+        .tab:hover { border-color: var(--cyan); color: var(--text); }
+        .tab.active { background: rgba(88, 166, 255, 0.1); border-color: var(--cyan); color: var(--cyan); }
+        .tab.arg-tab { border-color: var(--yellow); }
+        .tab.arg-tab.active { background: rgba(227, 179, 65, 0.15); border-color: var(--yellow); color: var(--yellow); }
+        
+        .output { background: var(--bg-tertiary); border-radius: 6px; padding: 14px; min-height: 450px; max-height: 600px; overflow: auto; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.78rem; line-height: 1.6; white-space: pre-wrap; }
+        
+        .progress { padding: 20px; text-align: center; }
+        .progress-bar { height: 4px; background: var(--border); border-radius: 2px; margin: 15px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--cyan); transition: width 0.3s; }
+        .progress-text { color: var(--text-muted); font-size: 0.85rem; }
+        
+        .error { background: rgba(248, 81, 73, 0.1); border: 1px solid var(--red); border-radius: 6px; padding: 16px; color: var(--red); }
+        .warning { background: rgba(210, 153, 34, 0.1); border: 1px solid var(--orange); border-radius: 6px; padding: 12px; color: var(--orange); margin-bottom: 10px; font-size: 0.8rem; }
+        
+        .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; padding: 8px 10px; background: var(--bg-tertiary); border-radius: 4px; font-size: 0.7rem; }
+        .legend-item { display: flex; align-items: center; gap: 5px; color: var(--text-muted); }
+        .legend-color { width: 10px; height: 10px; border-radius: 2px; }
+        
+        .func-entry { color: var(--cyan); }
+        .func-target { color: var(--green); font-weight: bold; }
+        .func-inter { color: var(--purple); }
+        .func-macro { color: var(--pink); }
+        .func-ptr { color: #58a6ff; }
+        .func-ext { color: var(--orange); }
+        .file-ref { color: var(--text-muted); }
+        .arg-highlight { color: var(--yellow); font-weight: bold; }
+        .arg-value { color: var(--green); background: rgba(63, 185, 80, 0.15); padding: 1px 4px; border-radius: 3px; }
+        
+        .path-item { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+        .path-header { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .path-num { background: var(--cyan); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+        .path-chain { font-family: monospace; font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+        .path-chain .func { background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px; }
+        .path-chain .func.target { background: rgba(63, 185, 80, 0.2); color: var(--green); }
+        .path-chain .arrow { color: var(--cyan); }
+        
+        /* Argument flow styles */
+        .arg-flow-item { background: var(--bg-secondary); border: 1px solid var(--yellow); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        .arg-flow-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        .arg-flow-title { color: var(--yellow); font-weight: 600; font-size: 0.9rem; }
+        .arg-flow-badge { background: rgba(227, 179, 65, 0.2); color: var(--yellow); padding: 3px 10px; border-radius: 12px; font-size: 0.7rem; }
+        
+        .arg-step { background: var(--bg-tertiary); border-radius: 6px; padding: 10px; margin-bottom: 8px; border-left: 3px solid var(--purple); }
+        .arg-step.origin { border-left-color: var(--green); background: rgba(63, 185, 80, 0.05); }
+        .arg-step-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .arg-step-func { color: var(--purple); font-weight: 600; }
+        .arg-step.origin .arg-step-func { color: var(--green); }
+        .arg-step-file { color: var(--text-muted); font-size: 0.7rem; }
+        .arg-step-detail { font-size: 0.8rem; color: var(--text); }
+        .arg-step-detail code { background: var(--bg-secondary); padding: 2px 6px; border-radius: 3px; color: var(--yellow); }
+        
+        .arg-info-box { background: var(--bg-tertiary); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+        .arg-info-row { display: flex; gap: 20px; flex-wrap: wrap; }
+        .arg-info-item { }
+        .arg-info-item .label { color: var(--text-muted); font-size: 0.7rem; }
+        .arg-info-item .value { color: var(--cyan); font-family: monospace; font-size: 0.85rem; }
+        
+        .debug-section { background: rgba(88, 166, 255, 0.05); border: 1px solid var(--cyan); border-radius: 6px; padding: 10px; margin-top: 15px; }
+        .debug-title { color: var(--cyan); font-size: 0.8rem; margin-bottom: 8px; }
+        .debug-content { font-size: 0.7rem; color: var(--text-muted); max-height: 200px; overflow: auto; }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-tertiary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 C Call Tracer + Argument Flow</h1>
+            <p class="subtitle">Trace function paths & backtrack argument values (filenum, mode, etc.)</p>
+        </header>
+        
+        <div class="main-grid">
+            <div class="sidebar">
+                <div class="card">
+                    <div class="card-title">📁 Upload Files</div>
+                    <div class="upload-zone" id="uploadZone">
+                        <p>Drop .c and .h files here</p>
+                        <div>
+                            <span class="badge">.c</span>
+                            <span class="badge">.h</span>
+                        </div>
+                        <input type="file" id="fileInput" multiple accept=".c,.h,.cpp,.hpp" hidden>
+                    </div>
+                    <div class="file-list" id="fileList"></div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">⚙️ Call Path Analysis</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Entry Function</label>
+                            <input type="text" id="entryFunc" value="main">
+                        </div>
+                        <div class="form-group">
+                            <label>Target Function</label>
+                            <input type="text" id="targetFunc" value="mpf_mfs_open">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Max Search Depth</label>
+                        <input type="number" id="maxDepth" value="30" min="5" max="100">
+                    </div>
+                    <button class="btn btn-primary" id="analyzeBtn" disabled>🔬 Analyze Call Paths</button>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">🔄 Argument Flow Tracking</div>
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label>Target Function</label>
+                            <input type="text" id="argTargetFunc" value="mpf_mfs_open">
+                        </div>
+                        <div class="form-group">
+                            <label>Arg #</label>
+                            <select id="argPosition">
+                                <option value="1">1st</option>
+                                <option value="2">2nd</option>
+                                <option value="3" selected>3rd</option>
+                                <option value="4">4th</option>
+                                <option value="5">5th</option>
+                                <option value="6">6th</option>
+                                <option value="7">7th</option>
+                                <option value="8">8th</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Name (hint)</label>
+                            <input type="text" id="argName" value="filenum" placeholder="filenum">
+                        </div>
+                    </div>
+                    <button class="btn btn-arg" id="traceArgBtn" disabled>🔄 Trace Argument Origin</button>
+                </div>
+                
+                <div class="card" id="statsCard" style="display:none;">
+                    <div class="card-title">📊 Results</div>
+                    <div class="stats">
+                        <div class="stat"><div class="stat-val" id="statFiles">0</div><div class="stat-label">Files</div></div>
+                        <div class="stat"><div class="stat-val" id="statFuncs">0</div><div class="stat-label">Functions</div></div>
+                        <div class="stat"><div class="stat-val" id="statMacros">0</div><div class="stat-label">Macros</div></div>
+                        <div class="stat"><div class="stat-val" id="statPaths">0</div><div class="stat-label">Paths</div></div>
+                        <div class="stat"><div class="stat-val" id="statDepth">0</div><div class="stat-label">Max Depth</div></div>
+                        <div class="stat"><div class="stat-val" id="statTime">0</div><div class="stat-label">ms</div></div>
+                    </div>
+                </div>
+                
+                <button class="btn btn-secondary" id="clearBtn">Clear All</button>
+            </div>
+            
+            <div class="results">
+                <div class="card" style="height: 100%;">
+                    <div class="tabs">
+                        <button class="tab active" data-tab="tree">Call Tree</button>
+                        <button class="tab" data-tab="paths">All Paths</button>
+                        <button class="tab arg-tab" data-tab="argflow">🔄 Arg Flow</button>
+                        <button class="tab" data-tab="calls">Call Details</button>
+                        <button class="tab" data-tab="funcs">Functions</button>
+                        <button class="tab" data-tab="log">Debug Log</button>
+                    </div>
+                    
+                    <div class="legend">
+                        <div class="legend-item"><div class="legend-color" style="background:var(--cyan)"></div>Entry</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Target/Origin</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>Intermediate</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--pink)"></div>Macro</div>
+                        <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Argument</div>
+                    </div>
+                    
+                    <div class="output" id="output">
+                        <div style="color:var(--text-muted);text-align:center;padding:50px;">
+                            Upload C files and click Analyze to trace call paths
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// =====================================================
+// ENHANCED C PARSER WITH ROBUST ARGUMENT TRACKING
+// =====================================================
+class CParser {
+    constructor() {
+        this.files = new Map();             // filename -> content
+        this.functions = new Map();         // name -> func info
+        this.macros = new Map();            // name -> macro info
+        this.funcPointers = new Map();      // var -> Set of funcs
+        this.callGraph = new Map();         // caller -> Map of callees
+        this.functionCalls = new Map();     // func -> [{callee, args, line, raw}]
+        this.variableOrigins = new Map();   // func -> Map of var -> origin info
+        this.log = [];
+    }
+
+    addLog(type, msg) {
+        this.log.push({ type, msg, time: new Date().toISOString() });
+        console.log(`[${type}] ${msg}`);
+    }
+
+    // Remove comments but preserve line structure
+    removeComments(code) {
+        // Remove multi-line comments
+        code = code.replace(/\/\*[\s\S]*?\*\//g, match => {
+            return match.replace(/[^\n]/g, ' ');
+        });
+        // Remove single-line comments
+        code = code.replace(/\/\/.*$/gm, '');
+        return code;
+    }
+
+    // Remove string literals but preserve structure
+    removeStrings(code) {
+        code = code.replace(/"(?:[^"\\]|\\.)*"/g, '"STR"');
+        code = code.replace(/'(?:[^'\\]|\\.)*'/g, "'X'");
+        return code;
+    }
+
+    isValidFunc(name) {
+        const keywords = new Set([
+            'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'break',
+            'continue', 'return', 'goto', 'sizeof', 'typeof', 'NULL', 'null',
+            'true', 'false', 'void', 'int', 'char', 'float', 'double', 'long',
+            'short', 'unsigned', 'signed', 'const', 'static', 'extern',
+            'struct', 'enum', 'union', 'typedef', 'volatile', 'register',
+            'inline', 'auto', 'default', 'defined'
+        ]);
+        if (keywords.has(name)) return false;
+        if (/^\d/.test(name)) return false;
+        if (name.length < 2) return false;
+        return true;
+    }
+
+    // Parse macros from code
+    parseMacros(code, file) {
+        const normalized = code.replace(/\\\s*\n/g, ' ');
+        
+        // Function-like macros
+        const funcMacro = /#\s*define\s+(\w+)\s*\(([^)]*)\)\s+(.+?)(?=\n|$)/g;
+        let m;
+        while ((m = funcMacro.exec(normalized)) !== null) {
+            const name = m[1];
+            const params = m[2].split(',').map(p => p.trim()).filter(p => p);
+            const body = m[3].trim();
+            this.macros.set(name, { name, params, body, file, isFunctionLike: true });
+        }
+
+        // Object macros with values
+        const objMacro = /#\s*define\s+(\w+)\s+(\S[^\n]*)/g;
+        while ((m = objMacro.exec(normalized)) !== null) {
+            const name = m[1];
+            if (!this.macros.has(name) && !name.includes('(')) {
+                const body = m[2].trim();
+                this.macros.set(name, { name, params: [], body, file, isFunctionLike: false });
+            }
+        }
+    }
+
+    // Parse function pointer assignments
+    parseFuncPointers(code, file) {
+        const patterns = [
+            /\.(\w+)\s*=\s*&?(\w+)\s*[,;}\)]/g,
+            /(\w+)\s*=\s*&?(\w+)\s*;/g,
+            /\[\s*\w*\s*\]\s*=\s*&?(\w+)/g,
+        ];
+        
+        for (const pat of patterns) {
+            let m;
+            while ((m = pat.exec(code)) !== null) {
+                const varName = m[1];
+                const funcName = m[2] || m[1];
+                if (this.isValidFunc(funcName) && this.isValidFunc(varName)) {
+                    if (!this.funcPointers.has(varName)) {
+                        this.funcPointers.set(varName, new Set());
+                    }
+                    this.funcPointers.get(varName).add(funcName);
+                }
+            }
+        }
+    }
+
+    // Find matching brace
+    findBrace(code, start) {
+        let depth = 1, i = start;
+        const limit = Math.min(code.length, start + 100000);
+        while (i < limit && depth > 0) {
+            if (code[i] === '{') depth++;
+            else if (code[i] === '}') depth--;
+            i++;
+        }
+        return depth === 0 ? i : -1;
+    }
+
+    // IMPROVED: Extract function calls with their arguments
+    extractFunctionCalls(body, funcName) {
+        const calls = [];
+        const cleanBody = this.removeStrings(body);
+        
+        // Match function calls - be more careful with nested parens
+        let i = 0;
+        while (i < cleanBody.length) {
+            // Find potential function name
+            const nameMatch = cleanBody.slice(i).match(/^([a-zA-Z_]\w*)\s*\(/);
+            if (nameMatch && this.isValidFunc(nameMatch[1])) {
+                const calleeName = nameMatch[1];
+                const argsStart = i + nameMatch[0].length - 1; // Position of '('
+                
+                // Find matching closing paren
+                let depth = 1;
+                let j = argsStart + 1;
+                while (j < cleanBody.length && depth > 0) {
+                    if (cleanBody[j] === '(') depth++;
+                    else if (cleanBody[j] === ')') depth--;
+                    j++;
+                }
+                
+                if (depth === 0) {
+                    const argsStr = cleanBody.substring(argsStart + 1, j - 1);
+                    const args = this.parseArguments(argsStr);
+                    
+                    // Get line number approximately
+                    const lineNum = (cleanBody.substring(0, i).match(/\n/g) || []).length + 1;
+                    
+                    calls.push({
+                        callee: calleeName,
+                        args: args,
+                        argsRaw: argsStr.trim(),
+                        line: lineNum,
+                        raw: cleanBody.substring(i, j)
+                    });
+                    
+                    i = j;
+                    continue;
+                }
+            }
+            i++;
+        }
+        
+        this.functionCalls.set(funcName, calls);
+        return calls;
+    }
+
+    // IMPROVED: Parse arguments with better handling of complex expressions
+    parseArguments(argsStr) {
+        if (!argsStr.trim()) return [];
+        
+        const args = [];
+        let current = '';
+        let depth = 0;
+        let inString = false;
+        let stringChar = '';
+        
+        for (let i = 0; i < argsStr.length; i++) {
+            const c = argsStr[i];
+            const prev = i > 0 ? argsStr[i-1] : '';
+            
+            // Handle strings
+            if ((c === '"' || c === "'") && prev !== '\\') {
+                if (!inString) {
+                    inString = true;
+                    stringChar = c;
+                } else if (c === stringChar) {
+                    inString = false;
+                }
+                current += c;
+                continue;
+            }
+            
+            if (inString) {
+                current += c;
+                continue;
+            }
+            
+            // Handle nesting
+            if (c === '(' || c === '[' || c === '{') {
+                depth++;
+                current += c;
+            } else if (c === ')' || c === ']' || c === '}') {
+                depth--;
+                current += c;
+            } else if (c === ',' && depth === 0) {
+                const trimmed = current.trim();
+                if (trimmed) args.push(trimmed);
+                current = '';
+            } else {
+                current += c;
+            }
+        }
+        
+        const trimmed = current.trim();
+        if (trimmed) args.push(trimmed);
+        
+        return args;
+    }
+
+    // IMPROVED: Parse variable assignments and track origins
+    parseVariableOrigins(funcName, body, params) {
+        const origins = new Map();
+        const cleanBody = this.removeStrings(this.removeComments(body));
+        
+        // First, add parameters as origins (from caller)
+        params.forEach((p, idx) => {
+            origins.set(p.name, {
+                type: 'parameter',
+                paramIndex: idx,
+                value: `param[${idx}]`,
+                line: 0
+            });
+        });
+        
+        // Match: Type varName = value;
+        const declPattern = /\b(?:int|char|short|long|unsigned|signed|float|double|void|uint\d+_t|int\d+_t|size_t|ssize_t|\w+_t)\s*\*?\s*(\w+)\s*=\s*([^;]+);/g;
+        let m;
+        while ((m = declPattern.exec(cleanBody)) !== null) {
+            const varName = m[1];
+            const value = m[2].trim();
+            const line = (cleanBody.substring(0, m.index).match(/\n/g) || []).length + 1;
+            
+            origins.set(varName, {
+                type: this.classifyValue(value),
+                value: value,
+                line: line
+            });
+        }
+        
+        // Match: varName = value; (simple assignment)
+        const assignPattern = /\b(\w+)\s*=\s*([^;=]+);/g;
+        while ((m = assignPattern.exec(cleanBody)) !== null) {
+            const varName = m[1];
+            const value = m[2].trim();
+            
+            // Don't override params or earlier declarations
+            if (!origins.has(varName) || origins.get(varName).type === 'parameter') {
+                // Skip if this looks like a comparison or complex expression start
+                if (!value.includes('==') && !value.includes('!=')) {
+                    const line = (cleanBody.substring(0, m.index).match(/\n/g) || []).length + 1;
+                    origins.set(varName, {
+                        type: this.classifyValue(value),
+                        value: value,
+                        line: line
+                    });
+                }
+            }
+        }
+        
+        this.variableOrigins.set(funcName, origins);
+        return origins;
+    }
+
+    // Classify what type of value this is
+    classifyValue(value) {
+        if (/^-?\d+$/.test(value)) return 'literal-int';
+        if (/^0x[\da-fA-F]+$/i.test(value)) return 'literal-hex';
+        if (/^-?\d+\.\d+$/.test(value)) return 'literal-float';
+        if (/^["']/.test(value)) return 'literal-string';
+        if (/^\w+$/.test(value)) {
+            if (this.macros.has(value)) return 'macro';
+            return 'variable';
+        }
+        if (/^\w+\s*\(/.test(value)) return 'function-call';
+        if (/->/.test(value)) return 'member-ptr';
+        if (/\./.test(value)) return 'member-dot';
+        if (/\[/.test(value)) return 'array-access';
+        if (/[+\-*\/%&|^]/.test(value)) return 'expression';
+        return 'unknown';
+    }
+
+    // Parse function parameters
+    parseParameters(paramsStr) {
+        const params = [];
+        if (!paramsStr.trim() || paramsStr.trim() === 'void') return params;
+        
+        const parts = paramsStr.split(',');
+        for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed) continue;
+            
+            // Extract last word as parameter name
+            // Handle: int x, const char *ptr, struct foo *bar, int arr[]
+            const match = trimmed.match(/(\w+)\s*(?:\[\s*\d*\s*\])?\s*$/);
+            if (match) {
+                params.push({
+                    name: match[1],
+                    full: trimmed
+                });
+            }
+        }
+        
+        return params;
+    }
+
+    // Parse functions from code
+    parseFunctions(code, file) {
+        const cleanCode = this.removeComments(code);
+        
+        // Match function definitions
+        const funcRegex = /\b([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*\{/g;
+        let m;
+        
+        while ((m = funcRegex.exec(cleanCode)) !== null) {
+            const name = m[1];
+            const paramsStr = m[2];
+            
+            if (!this.isValidFunc(name)) continue;
+            if (this.functions.has(name)) continue;
+            
+            const params = this.parseParameters(paramsStr);
+            const bodyStart = m.index + m[0].length;
+            const bodyEnd = this.findBrace(cleanCode, bodyStart);
+            
+            if (bodyEnd === -1) continue;
+            
+            const body = cleanCode.substring(bodyStart - 1, bodyEnd);
+            
+            // Extract function calls with arguments
+            const calls = this.extractFunctionCalls(body, name);
+            
+            // Parse variable origins
+            this.parseVariableOrigins(name, body, params);
+            
+            // Build simple call map
+            const callMap = new Map();
+            for (const call of calls) {
+                if (!callMap.has(call.callee)) {
+                    callMap.set(call.callee, { type: 'direct' });
+                }
+            }
+            
+            // Add macro expansions
+            for (const [macroName, macro] of this.macros) {
+                if (body.includes(macroName)) {
+                    callMap.set(macroName, { type: 'macro-invoke' });
+                }
+            }
+
+            this.functions.set(name, {
+                name,
+                file,
+                params,
+                body,
+                calls: callMap,
+                callDetails: calls
+            });
+        }
+    }
+
+    buildGraph() {
+        for (const [name, func] of this.functions) {
+            this.callGraph.set(name, func.calls);
+        }
+        this.addLog('info', `Built call graph: ${this.functions.size} functions`);
+    }
+
+    parseFile(filename, content) {
+        this.addLog('info', `Parsing ${filename}`);
+        this.files.set(filename, content);
+        
+        try {
+            this.parseMacros(content, filename);
+            this.parseFuncPointers(content, filename);
+            this.parseFunctions(content, filename);
+        } catch (e) {
+            this.addLog('error', `Error parsing ${filename}: ${e.message}`);
+        }
+    }
+
+    findPaths(entry, target, maxDepth = 30, maxPaths = 100, maxTime = 5000) {
+        const paths = [];
+        const startTime = Date.now();
+        
+        if (!this.callGraph.has(entry)) {
+            this.addLog('error', `Entry '${entry}' not found`);
+            return paths;
+        }
+
+        const dfs = (current, path, visited) => {
+            if (Date.now() - startTime > maxTime) return;
+            if (paths.length >= maxPaths) return;
+            if (path.length > maxDepth) return;
+            if (visited.has(current)) return;
+
+            if (current === target) {
+                paths.push([...path]);
+                return;
+            }
+
+            visited.add(current);
+            
+            const calls = this.callGraph.get(current);
+            if (calls) {
+                for (const [callee, info] of calls) {
+                    path.push({ name: callee, ...info });
+                    dfs(callee, path, visited);
+                    path.pop();
+                }
+            }
+
+            visited.delete(current);
+        };
+
+        dfs(entry, [{ name: entry, type: 'entry' }], new Set());
+        
+        this.addLog('info', `Found ${paths.length} paths in ${Date.now() - startTime}ms`);
+        return paths;
+    }
+
+    // =====================================================
+    // ARGUMENT FLOW TRACKING (IMPROVED)
+    // =====================================================
+
+    traceArgumentFlow(targetFunc, argPosition, paths) {
+        this.addLog('arg', `=== Tracing arg #${argPosition} of ${targetFunc} ===`);
+        
+        const results = [];
+        
+        for (let pathIdx = 0; pathIdx < paths.length; pathIdx++) {
+            const path = paths[pathIdx];
+            this.addLog('arg', `\nPath ${pathIdx + 1}: ${path.map(p => p.name).join(' → ')}`);
+            
+            const trace = this.traceArgInPath(targetFunc, argPosition, path);
+            
+            if (trace) {
+                results.push({
+                    pathIndex: pathIdx + 1,
+                    path: path,
+                    trace: trace
+                });
+            }
+        }
+        
+        this.addLog('arg', `\nFound ${results.length} traces with origins`);
+        return results;
+    }
+
+    traceArgInPath(targetFunc, argPosition, path) {
+        const trace = {
+            targetFunc,
+            argPosition,
+            steps: [],
+            origin: null
+        };
+        
+        let currentArgPos = argPosition;
+        let currentValue = null;
+        
+        // Walk backwards through the path
+        for (let i = path.length - 1; i >= 0; i--) {
+            const funcName = path[i].name;
+            const funcInfo = this.functions.get(funcName);
+            
+            if (!funcInfo) {
+                this.addLog('arg', `  [${funcName}] Not found in parsed functions`);
+                continue;
+            }
+            
+            // If this is the target function, we start from here
+            if (funcName === targetFunc && i === path.length - 1) {
+                this.addLog('arg', `  [${funcName}] Target function - looking for callers`);
+                continue;
+            }
+            
+            // Find the call from this function to the next function in path
+            const nextFunc = path[i + 1]?.name;
+            if (!nextFunc) continue;
+            
+            // Get the call details
+            const callDetails = funcInfo.callDetails || [];
+            const callToNext = callDetails.filter(c => c.callee === nextFunc);
+            
+            this.addLog('arg', `  [${funcName}] Looking for call to ${nextFunc}, found ${callToNext.length} call(s)`);
+            
+            if (callToNext.length === 0) {
+                // Maybe it's through a macro?
+                this.addLog('arg', `    No direct call found, checking macros...`);
+                continue;
+            }
+            
+            // Get the argument at the position
+            for (const call of callToNext) {
+                this.addLog('arg', `    Call: ${call.callee}(${call.argsRaw})`);
+                this.addLog('arg', `    Parsed args: [${call.args.join(', ')}]`);
+                
+                const argValue = call.args[currentArgPos - 1];
+                
+                if (!argValue) {
+                    this.addLog('arg', `    Arg #${currentArgPos} not found in call`);
+                    continue;
+                }
+                
+                this.addLog('arg', `    Arg #${currentArgPos} = "${argValue}"`);
+                currentValue = argValue;
+                
+                // Add step
+                trace.steps.push({
+                    func: funcName,
+                    file: funcInfo.file,
+                    callsFunc: nextFunc,
+                    argPosition: currentArgPos,
+                    argValue: argValue,
+                    line: call.line
+                });
+                
+                // Now trace where this value comes from
+                const origins = this.variableOrigins.get(funcName);
+                
+                // Check if it's a direct parameter
+                const paramIdx = funcInfo.params.findIndex(p => p.name === argValue);
+                if (paramIdx !== -1) {
+                    this.addLog('arg', `    → Is parameter #${paramIdx + 1} of ${funcName}`);
+                    currentArgPos = paramIdx + 1;
+                    // Continue tracing up
+                    continue;
+                }
+                
+                // Check if we have origin info
+                if (origins && origins.has(argValue)) {
+                    const origin = origins.get(argValue);
+                    this.addLog('arg', `    → Origin: ${origin.type} = ${origin.value}`);
+                    
+                    if (origin.type === 'parameter') {
+                        currentArgPos = origin.paramIndex + 1;
+                        continue;
+                    }
+                    
+                    // Found the origin!
+                    trace.origin = {
+                        func: funcName,
+                        file: funcInfo.file,
+                        type: origin.type,
+                        value: origin.value,
+                        variable: argValue,
+                        line: origin.line
+                    };
+                    break;
+                }
+                
+                // Check if it's a literal
+                const valueType = this.classifyValue(argValue);
+                if (valueType.startsWith('literal')) {
+                    this.addLog('arg', `    → Is literal: ${valueType}`);
+                    trace.origin = {
+                        func: funcName,
+                        file: funcInfo.file,
+                        type: valueType,
+                        value: argValue,
+                        variable: null,
+                        line: call.line
+                    };
+                    break;
+                }
+                
+                // Check if it's a macro
+                if (this.macros.has(argValue)) {
+                    const macro = this.macros.get(argValue);
+                    this.addLog('arg', `    → Is macro: ${macro.body}`);
+                    trace.origin = {
+                        func: funcName,
+                        file: funcInfo.file,
+                        type: 'macro',
+                        value: `${argValue} = ${macro.body}`,
+                        variable: argValue,
+                        line: call.line
+                    };
+                    break;
+                }
+                
+                // Can't trace further - mark as expression origin
+                this.addLog('arg', `    → Expression/unknown: ${argValue}`);
+                trace.origin = {
+                    func: funcName,
+                    file: funcInfo.file,
+                    type: valueType,
+                    value: argValue,
+                    variable: null,
+                    line: call.line
+                };
+                break;
+            }
+            
+            if (trace.origin) break;
+        }
+        
+        // If we reached entry without finding origin, check entry params
+        if (!trace.origin && path.length > 0) {
+            const entryFunc = this.functions.get(path[0].name);
+            if (entryFunc && entryFunc.params[currentArgPos - 1]) {
+                trace.origin = {
+                    func: path[0].name,
+                    file: entryFunc.file,
+                    type: 'entry-parameter',
+                    value: entryFunc.params[currentArgPos - 1].name,
+                    variable: null,
+                    line: 0
+                };
+            }
+        }
+        
+        return trace;
+    }
+}
+
+// =====================================================
+// UI CONTROLLER
+// =====================================================
+class UI {
+    constructor() {
+        this.files = new Map();
+        this.parser = null;
+        this.results = null;
+        this.argResults = null;
+        this.currentTab = 'tree';
+        this.init();
+    }
+
+    init() {
+        this.uploadZone = document.getElementById('uploadZone');
+        this.fileInput = document.getElementById('fileInput');
+        this.fileList = document.getElementById('fileList');
+        this.analyzeBtn = document.getElementById('analyzeBtn');
+        this.clearBtn = document.getElementById('clearBtn');
+        this.traceArgBtn = document.getElementById('traceArgBtn');
+        this.output = document.getElementById('output');
+        this.statsCard = document.getElementById('statsCard');
+
+        this.uploadZone.addEventListener('click', () => this.fileInput.click());
+        this.fileInput.addEventListener('change', e => this.handleFiles(e.target.files));
+        
+        this.uploadZone.addEventListener('dragover', e => {
+            e.preventDefault();
+            this.uploadZone.style.borderColor = 'var(--cyan)';
+        });
+        this.uploadZone.addEventListener('dragleave', () => {
+            this.uploadZone.style.borderColor = '';
+        });
+        this.uploadZone.addEventListener('drop', e => {
+            e.preventDefault();
+            this.uploadZone.style.borderColor = '';
+            this.handleFiles(e.dataTransfer.files);
+        });
+
+        this.analyzeBtn.addEventListener('click', () => this.analyze());
+        this.clearBtn.addEventListener('click', () => this.clear());
+        this.traceArgBtn.addEventListener('click', () => this.traceArgument());
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => this.switchTab(tab.dataset.tab));
+        });
+    }
+
+    handleFiles(fileList) {
+        for (const file of fileList) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (['c', 'h', 'cpp', 'hpp'].includes(ext)) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    this.files.set(file.name, e.target.result);
+                    this.updateFileList();
+                };
+                reader.readAsText(file);
+            }
+        }
+    }
+
+    updateFileList() {
+        this.fileList.innerHTML = '';
+        
+        for (const name of this.files.keys()) {
+            const ext = name.split('.').pop().toLowerCase();
+            const type = ['h', 'hpp'].includes(ext) ? 'h' : 'c';
+            
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            item.innerHTML = `
+                <span><span class="type ${type}">${type.toUpperCase()}</span>${name}</span>
+                <button class="remove" data-file="${name}">×</button>
+            `;
+            this.fileList.appendChild(item);
+        }
+
+        this.fileList.querySelectorAll('.remove').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.files.delete(btn.dataset.file);
+                this.updateFileList();
+            });
+        });
+
+        this.analyzeBtn.disabled = this.files.size === 0;
+        this.traceArgBtn.disabled = this.files.size === 0;
+        this.uploadZone.classList.toggle('has-files', this.files.size > 0);
+    }
+
+    async analyze() {
+        const entry = document.getElementById('entryFunc').value.trim();
+        const target = document.getElementById('targetFunc').value.trim();
+        const maxDepth = parseInt(document.getElementById('maxDepth').value) || 30;
+
+        if (!entry || !target) {
+            alert('Please enter entry and target function names');
+            return;
+        }
+
+        this.output.innerHTML = `
+            <div class="progress">
+                <div class="progress-bar"><div class="progress-fill" style="width: 10%"></div></div>
+                <p class="progress-text">Parsing files...</p>
+            </div>
+        `;
+
+        await new Promise(r => setTimeout(r, 50));
+        const startTime = Date.now();
+
+        try {
+            this.parser = new CParser();
+
+            const progressBar = this.output.querySelector('.progress-fill');
+            const progressText = this.output.querySelector('.progress-text');
+
+            // Parse headers first
+            let count = 0;
+            for (const [name, content] of this.files) {
+                const ext = name.split('.').pop().toLowerCase();
+                if (['h', 'hpp'].includes(ext)) {
+                    this.parser.parseFile(name, content);
+                    count++;
+                    progressBar.style.width = (10 + (count / this.files.size) * 40) + '%';
+                    progressText.textContent = `Parsing ${name}...`;
+                    await new Promise(r => setTimeout(r, 10));
+                }
+            }
+
+            // Parse source files
+            for (const [name, content] of this.files) {
+                const ext = name.split('.').pop().toLowerCase();
+                if (['c', 'cpp'].includes(ext)) {
+                    this.parser.parseFile(name, content);
+                    count++;
+                    progressBar.style.width = (10 + (count / this.files.size) * 40) + '%';
+                    progressText.textContent = `Parsing ${name}...`;
+                    await new Promise(r => setTimeout(r, 10));
+                }
+            }
+
+            progressBar.style.width = '70%';
+            progressText.textContent = 'Building call graph...';
+            await new Promise(r => setTimeout(r, 30));
+
+            this.parser.buildGraph();
+
+            progressBar.style.width = '85%';
+            progressText.textContent = 'Finding paths...';
+            await new Promise(r => setTimeout(r, 30));
+
+            const paths = this.parser.findPaths(entry, target, maxDepth, 100, 5000);
+            const elapsed = Date.now() - startTime;
+
+            this.results = { entry, target, paths, elapsed };
+
+            // Update stats
+            document.getElementById('statFiles').textContent = this.files.size;
+            document.getElementById('statFuncs').textContent = this.parser.functions.size;
+            document.getElementById('statMacros').textContent = this.parser.macros.size;
+            document.getElementById('statPaths').textContent = paths.length;
+            document.getElementById('statDepth').textContent = paths.length > 0 ? Math.max(...paths.map(p => p.length)) : 0;
+            document.getElementById('statTime').textContent = elapsed;
+            this.statsCard.style.display = 'block';
+
+            this.switchTab(this.currentTab);
+
+        } catch (error) {
+            console.error(error);
+            this.output.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
+        }
+    }
+
+    async traceArgument() {
+        const targetFunc = document.getElementById('argTargetFunc').value.trim();
+        const argPosition = parseInt(document.getElementById('argPosition').value);
+        const argName = document.getElementById('argName').value.trim();
+        
+        if (!this.parser || !this.results) {
+            alert('Please run "Analyze Call Paths" first');
+            return;
+        }
+
+        if (!targetFunc) {
+            alert('Please enter target function name');
+            return;
+        }
+
+        this.output.innerHTML = `
+            <div class="progress">
+                <div class="progress-bar"><div class="progress-fill" style="width: 50%"></div></div>
+                <p class="progress-text">Tracing argument #${argPosition} (${argName || 'unnamed'}) of ${targetFunc}...</p>
+            </div>
+        `;
+
+        await new Promise(r => setTimeout(r, 100));
+
+        try {
+            // Find paths to target
+            let pathsToTarget = this.results.paths;
+            
+            if (targetFunc !== this.results.target) {
+                pathsToTarget = this.parser.findPaths(this.results.entry, targetFunc, 30, 100, 5000);
+            }
+
+            if (pathsToTarget.length === 0) {
+                this.output.innerHTML = `<div class="error">No paths found to ${targetFunc}</div>`;
+                return;
+            }
+
+            // Trace argument
+            this.argResults = {
+                targetFunc,
+                argPosition,
+                argName,
+                traces: this.parser.traceArgumentFlow(targetFunc, argPosition, pathsToTarget)
+            };
+
+            this.switchTab('argflow');
+
+        } catch (error) {
+            console.error(error);
+            this.output.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
+        }
+    }
+
+    switchTab(tab) {
+        this.currentTab = tab;
+        
+        document.querySelectorAll('.tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === tab);
+        });
+
+        if (!this.results && !this.parser) return;
+
+        switch (tab) {
+            case 'tree': this.renderTree(); break;
+            case 'paths': this.renderPaths(); break;
+            case 'argflow': this.renderArgFlow(); break;
+            case 'calls': this.renderCallDetails(); break;
+            case 'funcs': this.renderFunctions(); break;
+            case 'log': this.renderLog(); break;
+        }
+    }
+
+    renderTree() {
+        if (!this.results || this.results.paths.length === 0) {
+            this.output.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:50px;">No paths found</div>`;
+            return;
+        }
+
+        const root = { name: this.results.entry, type: 'entry', children: new Map() };
+        
+        for (const path of this.results.paths) {
+            let node = root;
+            for (let i = 1; i < path.length; i++) {
+                const step = path[i];
+                if (!node.children.has(step.name)) {
+                    node.children.set(step.name, {
+                        name: step.name,
+                        type: step.name === this.results.target ? 'target' : step.type,
+                        children: new Map()
+                    });
+                }
+                node = node.children.get(step.name);
+            }
+        }
+
+        let html = '';
+        const render = (node, prefix = '', isLast = true) => {
+            const conn = isLast ? '└── ' : '├── ';
+            let cls = 'func-inter';
+            if (node.type === 'entry') cls = 'func-entry';
+            else if (node.type === 'target') cls = 'func-target';
+            else if (node.type === 'macro') cls = 'func-macro';
+
+            const marker = node.type === 'target' ? ' ★' : '';
+            const file = this.parser.functions.get(node.name)?.file;
+            const fileRef = file ? ` <span class="file-ref">[${file}]</span>` : '';
+
+            html += `${prefix}${conn}<span class="${cls}">${node.name}</span>${marker}${fileRef}\n`;
+
+            const children = [...node.children.values()];
+            const newPrefix = prefix + (isLast ? '    ' : '│   ');
+            children.forEach((child, i) => render(child, newPrefix, i === children.length - 1));
+        };
+
+        render(root);
+        this.output.innerHTML = html;
+    }
+
+    renderPaths() {
+        if (!this.results || this.results.paths.length === 0) {
+            this.output.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:50px;">No paths found</div>`;
+            return;
+        }
+
+        let html = '';
+        this.results.paths.forEach((path, i) => {
+            html += `<div class="path-item">
+                <div class="path-header">
+                    <span class="path-num">Path ${i + 1}</span>
+                    <span style="color:var(--text-muted);font-size:0.75rem;">Depth: ${path.length}</span>
+                </div>
+                <div class="path-chain">`;
+            
+            path.forEach((step, j) => {
+                const isTarget = j === path.length - 1;
+                html += `<span class="func ${isTarget ? 'target' : ''}">${step.name}</span>`;
+                if (j < path.length - 1) html += '<span class="arrow">→</span>';
+            });
+            
+            html += '</div></div>';
+        });
+
+        this.output.innerHTML = html;
+    }
+
+    renderArgFlow() {
+        if (!this.argResults || this.argResults.traces.length === 0) {
+            this.output.innerHTML = `
+                <div style="color:var(--text-muted);text-align:center;padding:40px;">
+                    <div style="font-size:1.5rem;margin-bottom:10px;">🔄</div>
+                    <div>No argument traces found</div>
+                    <div style="margin-top:10px;font-size:0.8rem;">
+                        Click <strong>"Trace Argument Origin"</strong> after analyzing paths
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const { targetFunc, argPosition, argName, traces } = this.argResults;
+
+        let html = `
+            <div class="arg-info-box">
+                <div class="arg-info-row">
+                    <div class="arg-info-item">
+                        <div class="label">Target Function</div>
+                        <div class="value">${targetFunc}()</div>
+                    </div>
+                    <div class="arg-info-item">
+                        <div class="label">Argument</div>
+                        <div class="value">#${argPosition}${argName ? ` (${argName})` : ''}</div>
+                    </div>
+                    <div class="arg-info-item">
+                        <div class="label">Traces Found</div>
+                        <div class="value">${traces.length}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Group by origin value
+        const byOrigin = new Map();
+        for (const trace of traces) {
+            if (trace.trace.origin) {
+                const key = `${trace.trace.origin.value}`;
+                if (!byOrigin.has(key)) {
+                    byOrigin.set(key, { origin: trace.trace.origin, traces: [] });
+                }
+                byOrigin.get(key).traces.push(trace);
+            }
+        }
+
+        html += `<div style="margin-bottom:15px;color:var(--text-muted);font-size:0.85rem;">
+            Found <strong style="color:var(--yellow)">${byOrigin.size}</strong> unique origin value(s)
+        </div>`;
+
+        let originIdx = 0;
+        for (const [key, data] of byOrigin) {
+            originIdx++;
+            const origin = data.origin;
+            
+            html += `<div class="arg-flow-item">
+                <div class="arg-flow-header">
+                    <span class="arg-flow-title">Origin #${originIdx}</span>
+                    <span class="arg-flow-badge">${origin.type}</span>
+                </div>
+                
+                <div class="arg-step origin">
+                    <div class="arg-step-header">
+                        <span class="arg-step-func">📍 ${origin.func}()</span>
+                        <span class="arg-step-file">${origin.file}${origin.line ? `:${origin.line}` : ''}</span>
+                    </div>
+                    <div class="arg-step-detail">
+                        Value: <code>${this.escapeHtml(origin.value)}</code>
+                        ${origin.variable ? `<br>Variable: <code>${origin.variable}</code>` : ''}
+                    </div>
+                </div>`;
+            
+            // Show flow steps for first trace
+            const firstTrace = data.traces[0];
+            if (firstTrace.trace.steps.length > 0) {
+                html += `<div style="margin:10px 0 5px;color:var(--text-muted);font-size:0.75rem;">Flow through call chain:</div>`;
+                
+                for (const step of firstTrace.trace.steps) {
+                    html += `
+                        <div class="arg-step">
+                            <div class="arg-step-header">
+                                <span class="arg-step-func">${step.func}()</span>
+                                <span class="arg-step-file">${step.file}</span>
+                            </div>
+                            <div class="arg-step-detail">
+                                Passes <code>${this.escapeHtml(step.argValue)}</code> as arg #${step.argPosition} to ${step.callsFunc}()
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            html += `<div style="margin-top:10px;font-size:0.75rem;color:var(--text-muted);">
+                Used in ${data.traces.length} path(s): ${data.traces.map(t => '#' + t.pathIndex).join(', ')}
+            </div>`;
+            
+            html += `</div>`;
+        }
+
+        this.output.innerHTML = html;
+    }
+
+    renderCallDetails() {
+        if (!this.parser) return;
+
+        let html = '<strong>Function Calls with Arguments</strong>\n\n';
+        
+        for (const [funcName, calls] of this.parser.functionCalls) {
+            if (calls.length === 0) continue;
+            
+            html += `<span class="func-inter">${funcName}</span>:\n`;
+            for (const call of calls) {
+                html += `  → ${call.callee}(`;
+                html += call.args.map((a, i) => `<span class="arg-highlight">${i+1}:</span>${this.escapeHtml(a)}`).join(', ');
+                html += `)\n`;
+            }
+            html += '\n';
+        }
+
+        this.output.innerHTML = html;
+    }
+
+    renderFunctions() {
+        if (!this.parser) return;
+
+        let html = `<strong>Functions (${this.parser.functions.size})</strong>\n\n`;
+        
+        for (const [name, func] of this.parser.functions) {
+            const params = func.params.map(p => p.name).join(', ');
+            html += `<span class="func-inter">${name}</span>(${params}) <span class="file-ref">[${func.file}]</span>\n`;
+        }
+
+        this.output.innerHTML = html;
+    }
+
+    renderLog() {
+        if (!this.parser) return;
+
+        let html = '';
+        for (const entry of this.parser.log) {
+            const color = entry.type === 'error' ? 'var(--red)' : 
+                         entry.type === 'arg' ? 'var(--yellow)' :
+                         entry.type === 'info' ? 'var(--cyan)' : 'var(--text)';
+            html += `<span style="color:${color}">[${entry.type.toUpperCase()}]</span> ${entry.msg}\n`;
+        }
+
+        this.output.innerHTML = html || '<span style="color:var(--text-muted)">No log entries</span>';
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    clear() {
+        this.files.clear();
+        this.parser = null;
+        this.results = null;
+        this.argResults = null;
+        this.updateFileList();
+        this.statsCard.style.display = 'none';
+        this.output.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:50px;">Upload C files and click Analyze</div>`;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => new UI());
+</script>
+</body>
+</html>
