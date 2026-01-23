@@ -53,7 +53,7 @@ except ImportError:
     load_env()
 
 try:
-    from openai import OpenAI
+    from openai import OpenAI, AzureOpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
@@ -1047,12 +1047,38 @@ class FileNoAgent:
         if not OPENAI_AVAILABLE:
             raise ImportError("openai package required")
         
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not set")
+        # Azure config (check first, like ai_analyzer.py)
+        azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+        azure_api_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
+        azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "")
         
-        self.client = OpenAI(api_key=api_key)
-        self.model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+        # Check for placeholder values
+        if "your-resource" in azure_endpoint:
+            azure_endpoint = ""
+        if "your-api-key" in azure_api_key:
+            azure_api_key = ""
+        
+        # OpenAI config
+        openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+        openai_model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+        
+        # Initialize client - Azure first, then OpenAI
+        if all([azure_endpoint, azure_api_key, azure_deployment]):
+            self.client = AzureOpenAI(
+                azure_endpoint=azure_endpoint,
+                api_key=azure_api_key,
+                api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+            )
+            self.model = azure_deployment
+            if verbose:
+                print("🔷 Using Azure OpenAI")
+        elif openai_api_key:
+            self.client = OpenAI(api_key=openai_api_key)
+            self.model = openai_model
+            if verbose:
+                print(f"🟢 Using OpenAI ({self.model})")
+        else:
+            raise ValueError("No AI credentials configured. Set AZURE_OPENAI_* or OPENAI_API_KEY in .env file")
         
         self.conversation_history: List[Dict] = []
         
