@@ -1061,8 +1061,10 @@ class FileNoAgent:
         # OpenAI config
         openai_api_key = os.environ.get("OPENAI_API_KEY", "")
         openai_model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+        openai_base_url = os.environ.get("OPENAI_BASE_URL", "")  # For proxy support
         
         # Initialize client - Azure first, then OpenAI
+        self.provider = None
         if all([azure_endpoint, azure_api_key, azure_deployment]):
             self.client = AzureOpenAI(
                 azure_endpoint=azure_endpoint,
@@ -1070,12 +1072,23 @@ class FileNoAgent:
                 api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
             )
             self.model = azure_deployment
+            self.provider = "Azure"
             if verbose:
                 print("🔷 Using Azure OpenAI")
+                print(f"   Endpoint: {azure_endpoint[:50]}...")
+                print(f"   Deployment: {azure_deployment}")
+                print(f"   API Version: {os.environ.get('AZURE_OPENAI_API_VERSION', '2024-02-15-preview')}")
         elif openai_api_key:
-            self.client = OpenAI(api_key=openai_api_key)
+            # Support for proxy/custom base URL
+            if openai_base_url:
+                self.client = OpenAI(api_key=openai_api_key, base_url=openai_base_url)
+                if verbose:
+                    print(f"🟢 Using OpenAI via proxy ({openai_base_url})")
+            else:
+                self.client = OpenAI(api_key=openai_api_key)
             self.model = openai_model
-            if verbose:
+            self.provider = "OpenAI"
+            if verbose and not openai_base_url:
                 print(f"🟢 Using OpenAI ({self.model})")
         else:
             raise ValueError("No AI credentials configured. Set AZURE_OPENAI_* or OPENAI_API_KEY in .env file")
@@ -1318,6 +1331,61 @@ FINAL ANSWER:
 - 3rd Argument: <raw_argument>
 - Resolved Value: <numeric_value>"""
     
+    def test_connection(self) -> bool:
+        """Test if LLM connection works (simple call without tools)"""
+        print("\n🔍 Testing LLM connection...")
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "Say 'OK' if you can hear me."}],
+                max_tokens=10,
+                temperature=0
+            )
+            result = response.choices[0].message.content
+            print(f"   ✓ Connection OK: {result}")
+            return True
+        except Exception as e:
+            print(f"   ❌ Connection FAILED: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def test_tools(self) -> bool:
+        """Test if tool/function calling works"""
+        print("\n🔍 Testing tool calling support...")
+        try:
+            test_tools = [{
+                "type": "function",
+                "function": {
+                    "name": "test_tool",
+                    "description": "A test tool",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            }]
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "Call the test_tool function."}],
+                tools=test_tools,
+                tool_choice="auto",
+                max_tokens=100,
+                temperature=0
+            )
+            has_tools = bool(response.choices[0].message.tool_calls)
+            print(f"   ✓ Tool calling {'SUPPORTED' if has_tools else 'returned but no tool calls'}")
+            print(f"   Finish reason: {response.choices[0].finish_reason}")
+            return True
+        except Exception as e:
+            error_str = str(e).lower()
+            if "tool" in error_str or "function" in error_str:
+                print(f"   ⚠️ Tool calling NOT SUPPORTED by this deployment")
+                print(f"   Error: {e}")
+                return False
+            else:
+                print(f"   ❌ Error testing tools: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+    
     def log(self, msg: str, prefix: str = ""):
         if self.verbose:
             print(f"{prefix}{msg}")
@@ -1346,6 +1414,16 @@ IMPORTANT: Only report calls that are actually executed when main() runs. If a f
         self.log("="*70)
         self.log(f"\n📋 Task: {task[:100]}...")
         
+        # Test connection first
+        if not self.test_connection():
+            return "ERROR: Cannot connect to LLM API. Check your credentials."
+        
+        if not self.test_tools():
+            print("\n⚠️ Tool calling not supported. The agent requires function calling.")
+            print("   Your Azure deployment may not support this feature.")
+            print("   Try using a different deployment or check with your admin.")
+            return "ERROR: Tool calling not supported by this LLM deployment."
+        
         # Show reachability info upfront
         self.log(f"\n📊 Reachable functions from main(): {sorted(self.tools.call_graph.reachable_from_main)}")
         
@@ -1358,6 +1436,7 @@ IMPORTANT: Only report calls that are actually executed when main() runs. If a f
             self.log(f"🔄 Iteration {iteration}")
             
             try:
+                self.log("   📡 Calling LLM API...")
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[{"role": "system", "content": self.system_prompt}] + self.conversation_history,
@@ -1365,10 +1444,31 @@ IMPORTANT: Only report calls that are actually executed when main() runs. If a f
                     tool_choice="auto",
                     temperature=0
                 )
+                self.log("   ✓ LLM response received")
             except Exception as e:
-                return f"LLM Error: {str(e)}"
+                error_msg = str(e)
+                self.log(f"\n❌ LLM API Error: {error_msg}")
+                print(f"\n❌ LLM API Error: {error_msg}")  # Always print errors
+                import traceback
+                traceback.print_exc()
+                return f"LLM Error: {error_msg}"
+            
+            # Debug: Check response structure
+            if not response.choices:
+                self.log("   ⚠️ No choices in response!")
+                print("   ⚠️ No choices in response!")
+                return "Error: Empty response from LLM"
             
             message = response.choices[0].message
+            
+            # Debug: Log what we got
+            has_tool_calls = bool(message.tool_calls)
+            has_content = bool(message.content)
+            self.log(f"   Response: tool_calls={has_tool_calls}, content={has_content}")
+            
+            # Check finish reason
+            finish_reason = response.choices[0].finish_reason
+            self.log(f"   Finish reason: {finish_reason}")
             
             if message.tool_calls:
                 self.conversation_history.append({
@@ -1401,11 +1501,29 @@ IMPORTANT: Only report calls that are actually executed when main() runs. If a f
                         "content": result
                     })
             else:
+                # No tool calls - LLM is done or has a response
+                content = message.content or ""
+                
+                if not content.strip():
+                    self.log("   ⚠️ Empty response from LLM, continuing...")
+                    print("   ⚠️ Empty response from LLM (no tool calls, no content)")
+                    print(f"   Finish reason: {finish_reason}")
+                    # Try to continue - maybe LLM needs another prompt
+                    self.conversation_history.append({
+                        "role": "assistant", 
+                        "content": ""
+                    })
+                    self.conversation_history.append({
+                        "role": "user",
+                        "content": "Please continue your analysis. Use the available tools to find mpf_mfs_open calls."
+                    })
+                    continue
+                
                 self.log(f"\n{'='*70}")
                 self.log("✅ AGENT COMPLETE")
                 self.log("="*70)
-                self.log(f"\n{message.content}")
-                return message.content
+                self.log(f"\n{content}")
+                return content
         
         return "Max iterations reached"
     
