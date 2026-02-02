@@ -1407,7 +1407,8 @@ def main():
         analyze(args.project_dir, args.target, includes, not args.quiet)
     else:
         ap.print_help()
-
+#uv run python3 src/parser.py test_cases/apl001 -t your_function_name
+#uv run python src/parser.py --all
 
 if __name__ == "__main__":
     main()
