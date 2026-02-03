@@ -1412,3 +1412,43 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+""""def _load_registry(self) -> Dict:
+        registry_path = Path(__file__).parent / "function_registry.json"
+        if registry_path.exists():
+            try:
+                with open(registry_path) as f:
+                    return json.load(f)
+            except:
+                pass
+        return {}
+    
+    def _is_function_pointer_type(self, c_type: str) -> bool:
+        """Check if c_type represents a function pointer."""
+        if not c_type:
+            return False
+        c_type = c_type.strip()
+        # Match patterns like: void(), void(*)(), int(*)(int, char*), etc.
+        if "()" in c_type or "(*)" in c_type or "(*)(" in c_type:
+            return True
+        # Match explicit function pointer patterns
+        if "*)" in c_type and "(" in c_type:
+            return True
+        return False
+    
+    def _get_callback_indices(self, func_name: str) -> List[int]:
+        """Get indices of arguments that are function pointers."""
+        if func_name not in self.registry:
+            return []
+        
+        func_info = self.registry[func_name]
+        args = func_info.get("arguments", [])
+        
+        indices = []
+        for i, arg in enumerate(args):
+            c_type = arg.get("c_type", "")
+            if self._is_function_pointer_type(c_type):
+                indices.append(i)
+        
+        return indices""""
