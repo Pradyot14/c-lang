@@ -1429,3 +1429,48 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# Line: ~228-251
+if len(tokens) > 1:
+    if tokens[1] != '(':
+        value = tokens[1]
+    else:
+        in_body = False
+        for t in tokens[1:]:
+            if in_body:
+                value = t
+                break
+            if t == ')':
+                in_body = True
+
+after: 
+if len(tokens) > 1:
+    # Check if it's a function-like macro: NAME(args) body
+    # vs a simple macro with parenthesized value: NAME (value)
+    # Function-like: tokens = ['NAME', '(', 'a', ',', 'b', ')', 'body']
+    # Parenthesized value: tokens = ['NAME', '(', '1000', ')']
+    
+    if tokens[1] == '(':
+        # Find matching close paren
+        depth = 0
+        close_idx = -1
+        for i, t in enumerate(tokens[1:], 1):
+            if t == '(':
+                depth += 1
+            elif t == ')':
+                depth -= 1
+                if depth == 0:
+                    close_idx = i
+                    break
+        
+        # Check if there's a body after the parens (function-like macro)
+        if close_idx != -1 and close_idx + 1 < len(tokens):
+            # Function-like macro: body is everything after ')'
+            value = ' '.join(tokens[close_idx + 1:])
+        else:
+            # Parenthesized value: join all tokens after name
+            value = ''.join(tokens[1:])
+    else:
+        # Simple value or expression
+        value = ' '.join(tokens[1:])
