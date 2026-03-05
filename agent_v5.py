@@ -1848,3 +1848,22 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+there is a feature in claude "Agent Skills":
+https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview explain me in short what is this.
+
+
+
+in my middlemoove project, company told me this "作業3
+Clineの設定。Agent Skills でエージェントの挙動を設定する"
+
+
+understand the flow, i have two pdf (500 page each), i convert the pdf into markdown file using marker. and now it working fine.
+successfully convert the markdown file. now i created a mcp server and a md2json converter. when i run this server, it create multiple json file, in each json file, there is detail of the function, (in moove middleware pdf there are many function detail written) usng the regex we convert it into separate json for each function.
+basically we have two pdf (one for all pmf function and one for all mpf function). so after converting into json file. we have two folder , in one folder we have multiple json file, like pmf_x.json, pmf_y.json (all meta data, argument, type , description, all thing are there in the json,  pmf_x ,  pmf_y is function name , this is just example name, but it start with pmf,)
+in another folder we have multiple json file, like mpf_x.json, mpf_y.json (all meta data, argument, type , description, all thing are there in the json) understand upto this.
+
+
+                                                           now they told use to the agent skills, tell me how
