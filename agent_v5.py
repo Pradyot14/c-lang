@@ -1885,20 +1885,28 @@ any PMF or MPF function details including arguments, types,
 return values, and descriptions.
 
 
-                                                           # MiddleMOOVE Project Context
+# MOOVE Function Lookup Rules
 
-This is the MOOVE/MOOVE middleware verification project.
-We analyze C source code that uses PMF and MPF functions.
+## When working with PMF/MPF functions:
+- ALWAYS use the MCP tool to look up the function details before 
+  making any assumptions about arguments or return types
+- Never guess function signatures — the JSON data is the 
+  source of truth
+- PMF functions are in folder_pmf/, MPF functions in folder_mpf/
 
-## Architecture
-- PMF functions: Platform Management Functions
-- MPF functions: [whatever MPF stands for in your project]
-- Source code is C language targeting embedded middleware
+## JSON Structure
+Each function JSON contains:
+- name: function name (pmf_xxx or mpf_xxx)
+- arguments: list of arguments with types and descriptions
+- return_type: return value type
+- description: what the function does
+- [add whatever other fields your JSONs have]
 
-## MCP Server Available
-The `moove-functions` MCP server is available with tools to look up
-any PMF or MPF function details including arguments, types, 
-return values, and descriptions.
+## How to use
+1. When you see a PMF/MPF function call in C code, query the 
+   MCP server for that function's details
+2. Validate the arguments in the code match the specification
+3. Flag any mismatches
 
 
                                                                 # Coding Standards
