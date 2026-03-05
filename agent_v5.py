@@ -1866,4 +1866,43 @@ basically we have two pdf (one for all pmf function and one for all mpf function
 in another folder we have multiple json file, like mpf_x.json, mpf_y.json (all meta data, argument, type , description, all thing are there in the json) understand upto this.
 
 
-                                                           now they told use to the agent skills, tell me how
+now they told use to the agent skills, tell me how
+
+
+                                                           # MiddleMOOVE Project Context
+
+This is the MOOVE/MOOVE middleware verification project.
+We analyze C source code that uses PMF and MPF functions.
+
+## Architecture
+- PMF functions: Platform Management Functions
+- MPF functions: [whatever MPF stands for in your project]
+- Source code is C language targeting embedded middleware
+
+## MCP Server Available
+The `moove-functions` MCP server is available with tools to look up
+any PMF or MPF function details including arguments, types, 
+return values, and descriptions.
+
+
+                                                           # MiddleMOOVE Project Context
+
+This is the MOOVE/MOOVE middleware verification project.
+We analyze C source code that uses PMF and MPF functions.
+
+## Architecture
+- PMF functions: Platform Management Functions
+- MPF functions: [whatever MPF stands for in your project]
+- Source code is C language targeting embedded middleware
+
+## MCP Server Available
+The `moove-functions` MCP server is available with tools to look up
+any PMF or MPF function details including arguments, types, 
+return values, and descriptions.
+
+
+                                                                # Coding Standards
+
+- Write analysis comments in Japanese when requested
+- Follow MISRA C guidelines for any code suggestions
+- [add your company's specific coding rules here]
